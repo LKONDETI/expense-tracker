@@ -1,0 +1,40 @@
+# ── Frontend ─────────────────────────────────────────────────
+ledger/node_modules/
+ledger/dist/
+ledger/dist-ssr/
+ledger/.env*.local
+ledger/*.local
+
+# ── Backend (.NET) ────────────────────────────────────────────
+backend/bin/
+backend/obj/
+backend/.env
+backend/appsettings.*.json
+!backend/appsettings.json
+backend/*.user
+backend/.vs/
+
+# ── Database / Secrets ────────────────────────────────────────
+*.env
+.env
+.env.local
+connection-strings.txt
+secrets.json
+
+# ── Financial Statements (NEVER commit real PDFs) ─────────────
+*.pdf
+test-statements/
+sample-statements/
+
+# ── OS & Editor ───────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+*.suo
+*.sw?
+
+# ── Logs ─────────────────────────────────────────────────────
+logs/
+*.log
+npm-debug.log*
