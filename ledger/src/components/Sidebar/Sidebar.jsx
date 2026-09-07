@@ -1,14 +1,9 @@
-import { NavLink } from 'react-router-dom'
+import { NavLink, useNavigate } from 'react-router-dom'
 import {
-  LayoutDashboard,
-  Upload,
-  List,
-  RefreshCw,
-  Lightbulb,
-  MessageCircle,
-  ShieldCheck,
-  Settings,
+  LayoutDashboard, Upload, List, RefreshCw,
+  Lightbulb, MessageCircle, ShieldCheck, Settings, LogOut,
 } from 'lucide-react'
+import { useAuth } from '../../context/AuthContext'
 
 const NAV_ITEMS = [
   { to: '/dashboard',     icon: LayoutDashboard, label: 'Dashboard' },
@@ -22,6 +17,14 @@ const NAV_ITEMS = [
 ]
 
 export default function Sidebar() {
+  const { user, logout } = useAuth()
+  const navigate = useNavigate()
+
+  const handleLogout = () => {
+    logout()
+    navigate('/login', { replace: true })
+  }
+
   return (
     <aside className="sidebar" role="navigation" aria-label="Main navigation">
       <div className="sidebar-logo">
@@ -33,7 +36,6 @@ export default function Sidebar() {
           <NavLink
             key={to}
             to={to}
-            id={`nav-${label.toLowerCase().replace(/\s+/g, '-')}`}
             className={({ isActive }) => `nav-item${isActive ? ' active' : ''}`}
           >
             <Icon className="nav-icon" aria-hidden="true" />
@@ -41,6 +43,23 @@ export default function Sidebar() {
           </NavLink>
         ))}
       </nav>
+
+      {/* User + Logout */}
+      <div className="sidebar-user">
+        {user?.email && (
+          <p className="sidebar-user-email" title={user.email}>
+            {user.email}
+          </p>
+        )}
+        <button
+          className="sidebar-logout-btn"
+          onClick={handleLogout}
+          aria-label="Sign out"
+        >
+          <LogOut size={16} aria-hidden="true" />
+          Sign out
+        </button>
+      </div>
 
       <div className="sidebar-footer">
         <p>

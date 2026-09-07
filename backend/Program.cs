@@ -120,11 +120,29 @@ app.UseAuthorization();
 app.MapControllers();
 
 // ── Auto-migrate on startup (dev only) ────────────────────────
+// Skipped gracefully if Neon connection string is not yet configured.
+// Set ConnectionStrings:NeonDb in appsettings.json before running.
 if (app.Environment.IsDevelopment())
 {
-    using var scope = app.Services.CreateScope();
-    var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    await db.Database.MigrateAsync();
+    var connString = builder.Configuration.GetConnectionString("NeonDb") ?? "";
+    if (!connString.Contains("YOUR_") && !string.IsNullOrWhiteSpace(connString))
+    {
+        try
+        {
+            using var scope = app.Services.CreateScope();
+            var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+            await db.Database.MigrateAsync();
+            Console.WriteLine("✅ Database migrated successfully.");
+        }
+        catch (Exception ex)
+        {
+            Console.WriteLine($"⚠️  DB migration skipped: {ex.Message}");
+        }
+    }
+    else
+    {
+        Console.WriteLine("⚠️  NeonDb connection string not configured — DB skipped. Swagger is still available.");
+    }
 }
 
 app.Run();
