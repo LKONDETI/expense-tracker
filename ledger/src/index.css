@@ -1115,6 +1115,8 @@ body {
 
 /* --- Auth Pages -------------------------------------------- */
 .auth-page {
+  width: 100%;
+  flex: 1;
   min-height: 100vh;
   background: var(--color-bg);
   display: flex;
@@ -1388,3 +1390,191 @@ body {
   margin-bottom: var(--space-1);
 }
 
+/* --- Upload Zone ------------------------------------------- */
+.upload-zone {
+  border: 2px dashed var(--color-border);
+  border-radius: var(--radius-xl);
+  background: var(--color-surface);
+  padding: var(--space-16) var(--space-8);
+  text-align: center;
+  cursor: pointer;
+  transition: border-color var(--transition-fast), background var(--transition-fast);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-3);
+  margin-bottom: var(--space-6);
+}
+
+.upload-zone:hover,
+.upload-zone.drag-over {
+  border-color: var(--color-brand);
+  background: rgba(37, 99, 235, 0.04);
+}
+
+.upload-zone.uploading {
+  cursor: not-allowed;
+  pointer-events: none;
+  opacity: 0.8;
+}
+
+.upload-zone h3 {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.upload-zone p {
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.upload-icon {
+  width: 48px;
+  height: 48px;
+  color: var(--color-brand);
+  margin-bottom: var(--space-2);
+}
+
+.upload-spinner {
+  animation: spin 0.8s linear infinite;
+}
+
+.upload-error-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: var(--color-danger-bg);
+  border: 1px solid #fecaca;
+  color: var(--color-danger);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+  font-size: 13px;
+  font-weight: 500;
+  margin-bottom: var(--space-5);
+}
+
+.upload-error-dismiss {
+  margin-left: auto;
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: var(--color-danger);
+  display: flex;
+  align-items: center;
+  padding: 0;
+}
+
+/* --- Parsed Preview Section -------------------------------- */
+.parsed-section {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-5);
+}
+
+.parsed-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-4) var(--space-5);
+  gap: var(--space-4);
+  flex-wrap: wrap;
+}
+
+.parsed-header-left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+}
+
+.parsed-filename {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--color-text-primary);
+}
+
+.parsed-count {
+  font-size: 12px;
+  color: var(--color-text-secondary);
+  margin-top: 2px;
+}
+
+.parsed-header-actions {
+  display: flex;
+  gap: var(--space-3);
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.parsed-hint {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+/* Inline category select inside table */
+.category-select-inline {
+  font-size: 12px;
+  font-family: var(--font-sans);
+  padding: 3px 8px;
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  background: var(--color-bg);
+  color: var(--color-text-primary);
+  cursor: pointer;
+  outline: none;
+  transition: border-color var(--transition-fast);
+}
+
+.category-select-inline:focus {
+  border-color: var(--color-brand);
+}
+
+/* Highlight uncertain rows */
+tr.row-uncertain {
+  background: rgba(245, 158, 11, 0.05);
+}
+
+tr.row-uncertain td:first-child {
+  border-left: 3px solid var(--color-warning);
+}
+
+/* Amount colours */
+.amount-debit  { color: var(--color-danger);  font-weight: 600; font-variant-numeric: tabular-nums; }
+.amount-credit { color: var(--color-success); font-weight: 600; font-variant-numeric: tabular-nums; }
+.table-date    { color: var(--color-text-secondary); font-size: 13px; white-space: nowrap; }
+
+/* --- Review Page ------------------------------------------- */
+.review-actions {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-wrap: wrap;
+}
+
+.review-saving-indicator {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 13px;
+  color: var(--color-text-secondary);
+}
+
+.review-success-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  background: rgba(16, 185, 129, 0.08);
+  border: 1px solid rgba(16, 185, 129, 0.3);
+  color: var(--color-success);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-5);
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: var(--space-5);
+}

@@ -56,7 +56,23 @@ builder.Services.AddScoped<ITransactionService, TransactionService>();
 builder.Services.AddScoped<IStatementService, StatementService>();
 builder.Services.AddScoped<ISubscriptionService, SubscriptionService>();
 builder.Services.AddScoped<IInsightService, InsightService>();
-builder.Services.AddScoped<IAiService, AzureFoundryService>();
+
+// ── AI Service: auto-switch mock ↔ real based on config ───────
+var foundryEndpoint = builder.Configuration["AzureFoundry:Endpoint"] ?? "";
+var foundryKey      = builder.Configuration["AzureFoundry:ApiKey"]   ?? "";
+var useRealAi       = !foundryEndpoint.Contains("YOUR_") && !string.IsNullOrWhiteSpace(foundryEndpoint)
+                   && !foundryKey.Contains("YOUR_")      && !string.IsNullOrWhiteSpace(foundryKey);
+
+if (useRealAi)
+{
+    builder.Services.AddScoped<IAiService, AzureFoundryService>();
+    Console.WriteLine("🤖 AI: Azure Foundry (Claude) — real mode");
+}
+else
+{
+    builder.Services.AddScoped<IAiService, MockAiService>();
+    Console.WriteLine("🤖 AI: MockAiService — add Azure Foundry credentials in appsettings.json to switch to real Claude");
+}
 
 // ── Controllers ───────────────────────────────────────────────
 builder.Services.AddControllers();

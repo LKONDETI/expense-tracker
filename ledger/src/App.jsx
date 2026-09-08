@@ -8,14 +8,15 @@ import Login    from './pages/Login/Login'
 import Register from './pages/Register/Register'
 
 // Protected pages
-import Dashboard    from './pages/Dashboard/Dashboard'
-import Upload       from './pages/Upload/Upload'
-import Transactions from './pages/Transactions/Transactions'
+import Dashboard     from './pages/Dashboard/Dashboard'
+import Upload        from './pages/Upload/Upload'
+import Review        from './pages/Upload/Review'
+import Transactions  from './pages/Transactions/Transactions'
 import Subscriptions from './pages/Subscriptions/Subscriptions'
-import Insights     from './pages/Insights/Insights'
-import Ask          from './pages/Ask/Ask'
-import Privacy      from './pages/Privacy/Privacy'
-import Settings     from './pages/Settings/Settings'
+import Insights      from './pages/Insights/Insights'
+import Ask           from './pages/Ask/Ask'
+import Privacy       from './pages/Privacy/Privacy'
+import Settings      from './pages/Settings/Settings'
 
 export default function App() {
   return (
@@ -38,6 +39,7 @@ export default function App() {
             <Route index element={<Navigate to="/dashboard" replace />} />
             <Route path="dashboard"     element={<Dashboard />} />
             <Route path="upload"        element={<Upload />} />
+            <Route path="upload/review" element={<Review />} />
             <Route path="transactions"  element={<Transactions />} />
             <Route path="subscriptions" element={<Subscriptions />} />
             <Route path="insights"      element={<Insights />} />
