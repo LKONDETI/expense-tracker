@@ -126,6 +126,25 @@ export default function Login() {
             Create one
           </Link>
         </p>
+
+        {/* ── Dev-only test credentials hint ── */}
+        {import.meta.env.DEV && (
+          <div className="auth-dev-hint">
+            <p className="auth-dev-hint-label">🧪 Dev credentials</p>
+            <div className="auth-dev-hint-row">
+              <span>test@ledger.dev</span>
+              <span>·</span>
+              <span>Test123!</span>
+              <button
+                type="button"
+                className="auth-dev-fill-btn"
+                onClick={() => setForm({ email: 'test@ledger.dev', password: 'Test123!' })}
+              >
+                Fill
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Privacy note */}

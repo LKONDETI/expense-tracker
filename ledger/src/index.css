@@ -1352,6 +1352,52 @@ body {
   line-height: 1.5;
 }
 
+/* Dev-only test credentials hint */
+.auth-dev-hint {
+  margin-top: var(--space-4);
+  background: rgba(37, 99, 235, 0.06);
+  border: 1px dashed var(--color-brand);
+  border-radius: var(--radius-md);
+  padding: var(--space-3) var(--space-4);
+}
+
+.auth-dev-hint-label {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--color-brand);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-bottom: var(--space-2);
+}
+
+.auth-dev-hint-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: 12px;
+  font-family: monospace;
+  color: var(--color-text-secondary);
+}
+
+.auth-dev-fill-btn {
+  margin-left: auto;
+  font-size: 11px;
+  font-weight: 600;
+  font-family: var(--font-sans);
+  color: var(--color-brand);
+  background: none;
+  border: 1px solid var(--color-brand);
+  border-radius: var(--radius-sm);
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.auth-dev-fill-btn:hover {
+  background: var(--color-brand);
+  color: white;
+}
+
 /* --- Sidebar Logout Button --------------------------------- */
 .sidebar-logout-btn {
   display: flex;
