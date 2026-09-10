@@ -10,17 +10,19 @@ namespace Ledger.API.Services;
 /// </summary>
 public class MockAiService : IAiService
 {
+    // Matches dates even if glued to digits/characters: e.g. "2026-06-01", "2026/06/01", "06/01/2026", "June 1, 2026"
     private static readonly Regex DateRegex = new Regex(
-        @"(?<date>\b\d{4}[/\-]\d{1,2}[/\-]\d{1,2}\b|\b\d{1,2}[/\-]\d{1,2}(?:[/\-]\d{2,4})?\b|\b(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}(?:,?\s+\d{2,4})?\b)",
+        @"(?<date>\d{4}[/\-]\d{1,2}[/\-]\d{1,2}|\d{1,2}[/\-]\d{1,2}(?:[/\-]\d{2,4})?|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}(?:,?\s+\d{2,4})?)",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
+    // Matches amount formats: ($6.75), -$42.10, $2,450.00, 15.49
     private static readonly Regex AmountRegex = new Regex(
         @"(?<amount>\(\s*\$?\s*[\d,]+\.\d{2}\s*\)|-?\s*\$\s*[\d,]+\.\d{2}|-?\s*[\d,]+\.\d{2})",
         RegexOptions.Compiled);
 
     private static readonly string[] IgnoreHeaderKeywords =
     [
-        "beginning balance", "ending balance", "statement period", "account ending", "page "
+        "beginning balance", "ending balance", "statement period", "account ending", "page ", "date description amount"
     ];
 
     private static readonly (string[] keywords, string category)[] CategoryRules =
@@ -29,7 +31,7 @@ public class MockAiService : IAiService
         (["restaurant", "cafe", "coffee", "pizza", "burger", "sushi", "taco", "diner",
           "mcdonald", "starbucks", "chipotle", "subway", "doordash", "ubereats",
           "grubhub", "seamless", "postmates", "dining", "eatery", "bistro", "grill",
-          "kitchen", "food", "bakery", "deli", "bar ", " pub", "brewery", "panera"], "Dining"),
+          "kitchen", "food", "bakery", "deli", "bar ", " pub", "brewery", "panera", "wendy"], "Dining"),
         (["grocery", "groceries", "whole foods", "trader joe", "safeway", "kroger",
           "publix", "aldi", "heb", "wegmans", "sprouts", "market", "supermarket",
           "costco", "sam's club", "bj's"], "Groceries"),

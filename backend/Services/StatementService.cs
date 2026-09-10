@@ -3,6 +3,7 @@ using Ledger.API.DTOs;
 using Ledger.API.Models;
 using Microsoft.EntityFrameworkCore;
 using UglyToad.PdfPig;
+using UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor;
 
 namespace Ledger.API.Services;
 
@@ -36,9 +37,11 @@ public class StatementService(AppDbContext db, IAiService ai) : IStatementServic
             var pageTexts = new List<string>();
             foreach (var page in pdf.GetPages())
             {
-                var text = page.Text;
+                // ContentOrderTextExtractor orders words visually by lines and columns with spaces
+                var text = ContentOrderTextExtractor.GetText(page);
                 if (string.IsNullOrWhiteSpace(text) || text.Trim().Length < 10)
                 {
+                    // Fallback to joining words with spaces
                     var words = page.GetWords();
                     text = string.Join(" ", words.Select(w => w.Text));
                 }
@@ -56,8 +59,10 @@ public class StatementService(AppDbContext db, IAiService ai) : IStatementServic
             .ToListAsync();
 
         // 4. Call AI / Mock Service to extract + categorize transactions
+        Console.WriteLine($"[PDF EXTRACT DEBUG] rawText length={rawText.Length}, preview={rawText.Substring(0, Math.Min(rawText.Length, 300))}");
         var parsed = await ai.ExtractTransactionsAsync(rawText, userMappings
             .ToDictionary(m => m.MerchantPattern, m => m.Category));
+        Console.WriteLine($"[PDF EXTRACT DEBUG] parsedCount={parsed.Count}");
 
         // 5. Detect date range from parsed transactions
         if (parsed.Count > 0)
