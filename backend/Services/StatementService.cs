@@ -33,8 +33,18 @@ public class StatementService(AppDbContext db, IAiService ai) : IStatementServic
             ms.Position = 0;
 
             using var pdf = PdfDocument.Open(ms);
-            var pages = pdf.GetPages();
-            rawText = string.Join("\n", pages.Select(p => p.Text));
+            var pageTexts = new List<string>();
+            foreach (var page in pdf.GetPages())
+            {
+                var text = page.Text;
+                if (string.IsNullOrWhiteSpace(text) || text.Trim().Length < 10)
+                {
+                    var words = page.GetWords();
+                    text = string.Join(" ", words.Select(w => w.Text));
+                }
+                pageTexts.Add(text);
+            }
+            rawText = string.Join("\n", pageTexts);
         }
 
         if (string.IsNullOrWhiteSpace(rawText))
@@ -45,7 +55,7 @@ public class StatementService(AppDbContext db, IAiService ai) : IStatementServic
             .Where(m => m.UserId == userId)
             .ToListAsync();
 
-        // 4. Call AI to extract + categorize transactions
+        // 4. Call AI / Mock Service to extract + categorize transactions
         var parsed = await ai.ExtractTransactionsAsync(rawText, userMappings
             .ToDictionary(m => m.MerchantPattern, m => m.Category));
 
