@@ -5,65 +5,65 @@ namespace Ledger.API.Services;
 
 /// <summary>
 /// Development AI service used when AzureFoundry credentials are not configured.
-/// Unlike the old stub, this actually READS the PDF text and extracts real transactions
-/// using regex patterns common to US bank statements (Chase, BofA, Wells Fargo, etc.).
-/// Categorization is done via keyword matching instead of Claude.
-/// Switch to AzureFoundryService on Day 5 by adding real credentials in appsettings.json.
+/// Reads PDF text and extracts transactions using regex patterns matching bank statements.
+/// Categorization is done via keyword matching.
 /// </summary>
 public class MockAiService : IAiService
 {
-    // ── Transaction line patterns ─────────────────────────────
-    // Covers most US bank statement formats:
-    //   01/15  STARBUCKS #1234 SEATTLE WA          -5.75
-    //   01/15/2024  AMAZON.COM*1A2B3C4             67.99
-    //   2024-01-15   NETFLIX.COM                   15.49
-    private static readonly Regex[] TxnPatterns =
+    private static readonly Regex[] LinePatterns =
     [
-        // MM/DD or MM/DD/YYYY or MM/DD/YY  then description  then amount (with optional minus/credit)
+        // Pattern 1: ISO Date (YYYY-MM-DD or YYYY/MM/DD)
+        // Format: 2026-06-01 Description ($12.34) $5,668.47
         new Regex(
-            @"^(?<date>\d{1,2}[/\-]\d{1,2}(?:[/\-]\d{2,4})?)\s+(?<desc>[A-Za-z0-9* &'.#,\-/]+?)\s+(?<amount>-?\$?[\d,]+\.\d{2})",
-            RegexOptions.Multiline | RegexOptions.Compiled),
+            @"^\s*(?<date>\d{4}[/\-]\d{1,2}[/\-]\d{1,2})\s+(?<desc>.+?)\s+(?<amount>\(?\s*-?\$?\s*[\d,]+\.\d{2}\)?)(?:\s+\(?\s*-?\$?\s*[\d,]+\.\d{2}\)?)?\s*$",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled),
 
-        // YYYY-MM-DD ISO format
+        // Pattern 2: US Date (MM/DD/YYYY or MM/DD/YY or MM/DD)
+        // Format: 06/01/2026 Description ($12.34) $5,668.47
         new Regex(
-            @"^(?<date>\d{4}[/\-]\d{1,2}[/\-]\d{1,2})\s+(?<desc>[A-Za-z0-9* &'.#,\-/]+?)\s+(?<amount>-?\$?[\d,]+\.\d{2})",
-            RegexOptions.Multiline | RegexOptions.Compiled),
+            @"^\s*(?<date>\d{1,2}[/\-]\d{1,2}(?:[/\-]\d{2,4})?)\s+(?<desc>.+?)\s+(?<amount>\(?\s*-?\$?\s*[\d,]+\.\d{2}\)?)(?:\s+\(?\s*-?\$?\s*[\d,]+\.\d{2}\)?)?\s*$",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled),
 
-        // Date at end: description  amount  MM/DD
+        // Pattern 3: Month Name Date (Jun 01, 2026 or Jun 1)
+        // Format: Jun 01 Description ($12.34)
         new Regex(
-            @"^(?<desc>[A-Za-z][A-Za-z0-9* &'.#,\-/]{5,50}?)\s+(?<amount>-?\$?[\d,]+\.\d{2})\s+(?<date>\d{1,2}[/\-]\d{1,2}(?:[/\-]\d{2,4})?)",
-            RegexOptions.Multiline | RegexOptions.Compiled),
+            @"^\s*(?<date>(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\s+\d{1,2}(?:,?\s+\d{2,4})?)\s+(?<desc>.+?)\s+(?<amount>\(?\s*-?\$?\s*[\d,]+\.\d{2}\)?)(?:\s+\(?\s*-?\$?\s*[\d,]+\.\d{2}\)?)?\s*$",
+            RegexOptions.IgnoreCase | RegexOptions.Compiled),
     ];
 
-    // ── Keyword → Category mapping ────────────────────────────
+    // Fallback regex for un-anchored lines if line-by-line regex missed something
+    private static readonly Regex FallbackPattern = new Regex(
+        @"(?<date>\d{4}[/\-]\d{1,2}[/\-]\d{1,2}|\d{1,2}[/\-]\d{1,2}(?:[/\-]\d{2,4})?)\s+(?<desc>[A-Za-z0-9* &'.#,\-/]+?)\s+(?<amount>\(?\s*-?\$?\s*[\d,]+\.\d{2}\)?)",
+        RegexOptions.IgnoreCase | RegexOptions.Compiled);
+
     private static readonly (string[] keywords, string category)[] CategoryRules =
     [
-        (["rent", "mortgage", "lease", "hoa", "property"], "Housing"),
+        (["rent", "mortgage", "lease", "hoa", "property", "duke energy", "electric", "power", "utility", "water"], "Housing"),
         (["restaurant", "cafe", "coffee", "pizza", "burger", "sushi", "taco", "diner",
           "mcdonald", "starbucks", "chipotle", "subway", "doordash", "ubereats",
           "grubhub", "seamless", "postmates", "dining", "eatery", "bistro", "grill",
-          "kitchen", "food", "bakery", "deli", "bar ", " pub", "brewery"], "Dining"),
+          "kitchen", "food", "bakery", "deli", "bar ", " pub", "brewery", "panera"], "Dining"),
         (["grocery", "groceries", "whole foods", "trader joe", "safeway", "kroger",
           "publix", "aldi", "heb", "wegmans", "sprouts", "market", "supermarket",
           "costco", "sam's club", "bj's"], "Groceries"),
         (["uber", "lyft", "taxi", "transit", "metro", "bart", "mta", "amtrak",
           "delta", "united", "american air", "southwest", "jetblue", "spirit",
           "gas", "shell", "exxon", "chevron", "bp ", "sunoco", "speedway",
-          "parking", "toll", "zipcar", "enterprise", "hertz", "avis"], "Transportation"),
+          "parking", "toll", "zipcar", "enterprise", "hertz", "avis", "exxonmobil"], "Transportation"),
         (["netflix", "spotify", "hulu", "disney", "apple.com/bill", "amazon prime",
           "hbo", "peacock", "paramount", "youtube premium", "pandora", "tidal",
           "adobe", "microsoft 365", "dropbox", "icloud", "google one",
-          "gym", "fitness", "planet fitness", "equinox", "membership", "subscription"], "Subscriptions"),
+          "gym", "fitness", "planet fitness", "equinox", "membership", "subscription",
+          "comcast", "at&t", "verizon", "t-mobile", "redbox"], "Subscriptions"),
         (["amazon", "walmart", "target", "best buy", "apple store", "ebay",
           "etsy", "wayfair", "home depot", "lowe's", "ikea", "zara", "h&m",
           "gap", "nike", "adidas", "nordstrom", "macy's", "tj maxx", "marshalls",
-          "shopify", "purchase", "order"], "Shopping"),
+          "shopify", "purchase", "order", "cvs", "walgreens", "great clips", "amc"], "Shopping"),
         (["insurance", "geico", "progressive", "allstate", "state farm",
           "blue cross", "aetna", "cigna", "humana", "kaiser",
           "usaa", "metlife", "nationwide"], "Insurance"),
     ];
 
-    // ── Extract transactions from real PDF text ───────────────
     public Task<List<ParsedTransactionDto>> ExtractTransactionsAsync(
         string pdfText, Dictionary<string, string> knownMerchants)
     {
@@ -71,40 +71,62 @@ public class MockAiService : IAiService
 
         if (!string.IsNullOrWhiteSpace(pdfText))
         {
-            // Try each pattern until we get results
-            foreach (var pattern in TxnPatterns)
+            var lines = pdfText.Split(['\r', '\n'], StringSplitOptions.RemoveEmptyEntries);
+
+            foreach (var line in lines)
             {
-                var matches = pattern.Matches(pdfText);
-                foreach (Match m in matches)
+                var trimmed = line.Trim();
+                if (string.IsNullOrWhiteSpace(trimmed)) continue;
+
+                // Match against line patterns
+                bool matched = false;
+                foreach (var pattern in LinePatterns)
                 {
-                    if (!TryParseDate(m.Groups["date"].Value, out var date)) continue;
-                    if (!TryParseAmount(m.Groups["amount"].Value, out var amount)) continue;
-
-                    var desc = CleanDescription(m.Groups["desc"].Value);
-                    if (desc.Length < 3) continue;
-
-                    // Skip duplicate (same date + desc + amount)
-                    if (results.Any(r => r.Date == date && r.Description == desc && r.Amount == amount))
-                        continue;
-
-                    // Known merchant mapping takes priority
-                    var category = ResolveCategory(desc, knownMerchants);
-
-                    results.Add(new ParsedTransactionDto(date, desc, amount, category));
+                    var m = pattern.Match(trimmed);
+                    if (m.Success)
+                    {
+                        if (TryParseDate(m.Groups["date"].Value, out var date) &&
+                            TryParseAmount(m.Groups["amount"].Value, out var amount))
+                        {
+                            var desc = CleanDescription(m.Groups["desc"].Value);
+                            if (desc.Length >= 2)
+                            {
+                                var category = ResolveCategory(desc, knownMerchants);
+                                results.Add(new ParsedTransactionDto(date, desc, amount, category));
+                                matched = true;
+                                break;
+                            }
+                        }
+                    }
                 }
 
-                // Use first pattern that gives at least 2 results
-                if (results.Count >= 2) break;
+                // If line pattern didn't match, try fallback regex
+                if (!matched)
+                {
+                    var m = FallbackPattern.Match(trimmed);
+                    if (m.Success)
+                    {
+                        if (TryParseDate(m.Groups["date"].Value, out var date) &&
+                            TryParseAmount(m.Groups["amount"].Value, out var amount))
+                        {
+                            var desc = CleanDescription(m.Groups["desc"].Value);
+                            if (desc.Length >= 2 && !results.Any(r => r.Date == date && r.Description == desc && r.Amount == amount))
+                            {
+                                var category = ResolveCategory(desc, knownMerchants);
+                                results.Add(new ParsedTransactionDto(date, desc, amount, category));
+                            }
+                        }
+                    }
+                }
             }
         }
 
-        // Fallback: if regex found nothing (scanned image / unusual format)
-        // return a clearly-labelled placeholder so the user knows why it's empty
+        // Fallback: if nothing matched at all
         if (results.Count == 0)
         {
             results.Add(new ParsedTransactionDto(
                 DateOnly.FromDateTime(DateTime.UtcNow),
-                "⚠️ Could not parse PDF — connect Azure Foundry for AI extraction",
+                "⚠️ Could not parse PDF text — connect Azure Foundry for AI extraction",
                 0m,
                 "Other"
             ));
@@ -115,7 +137,6 @@ public class MockAiService : IAiService
         return Task.FromResult(results);
     }
 
-    // ── Ask / Insights (still mocked — needs Azure Foundry) ───
     public Task<string> AskAsync(string question, string transactionContext)
     {
         var q = question.ToLower();
@@ -142,55 +163,65 @@ public class MockAiService : IAiService
         return Task.FromResult(response);
     }
 
-    // ── Helpers ───────────────────────────────────────────────
     private static bool TryParseDate(string raw, out DateOnly date)
     {
         date = default;
+        if (string.IsNullOrWhiteSpace(raw)) return false;
+
         raw = raw.Trim().Replace("-", "/");
 
-        // Try common formats
-        string[] formats = ["M/d/yyyy", "M/d/yy", "M/d", "yyyy/M/d"];
+        string[] formats = ["yyyy/MM/dd", "yyyy/M/d", "MM/dd/yyyy", "M/d/yyyy", "MM/dd/yy", "M/d/yy", "MM/dd", "M/d"];
         foreach (var fmt in formats)
         {
             if (DateOnly.TryParseExact(raw, fmt,
                 System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.None, out date))
             {
-                // If year is missing (M/d format), use current year
                 if (date.Year == 1) date = new DateOnly(DateTime.UtcNow.Year, date.Month, date.Day);
                 return true;
             }
         }
+
+        if (DateTime.TryParse(raw, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var dt))
+        {
+            date = DateOnly.FromDateTime(dt);
+            if (date.Year == 1) date = new DateOnly(DateTime.UtcNow.Year, date.Month, date.Day);
+            return true;
+        }
+
         return false;
     }
 
     private static bool TryParseAmount(string raw, out decimal amount)
     {
         amount = 0;
-        raw = raw.Trim().Replace("$", "").Replace(",", "");
-        if (!decimal.TryParse(raw, out amount)) return false;
-        // Treat positive amounts as debits (expenses) — negate them
-        if (amount > 0) amount = -amount;
+        if (string.IsNullOrWhiteSpace(raw)) return false;
+
+        raw = raw.Trim();
+        bool isNegative = raw.StartsWith("(") && raw.EndsWith(")") || raw.Contains("-");
+
+        string cleaned = Regex.Replace(raw, @"[^\d.]", "");
+
+        if (!decimal.TryParse(cleaned, System.Globalization.CultureInfo.InvariantCulture, out decimal val))
+            return false;
+
+        amount = isNegative ? -val : val;
         return true;
     }
 
     private static string CleanDescription(string raw)
     {
-        // Remove extra whitespace, card numbers, reference codes (4+ digit sequences at end)
         raw = Regex.Replace(raw.Trim(), @"\s{2,}", " ");
         raw = Regex.Replace(raw, @"\s+\d{4,}\s*$", "");
-        raw = Regex.Replace(raw, @"#\d+", "").Trim();
-        return raw.Length > 60 ? raw[..60] : raw;
+        return raw.Trim();
     }
 
     private static string ResolveCategory(string desc, Dictionary<string, string> knownMerchants)
     {
-        // 1. Check user's saved merchant mappings first
         var descLower = desc.ToLower();
         foreach (var (pattern, cat) in knownMerchants)
             if (descLower.Contains(pattern.ToLower())) return cat;
 
-        // 2. Keyword matching
         foreach (var (keywords, category) in CategoryRules)
             if (keywords.Any(kw => descLower.Contains(kw))) return category;
 
