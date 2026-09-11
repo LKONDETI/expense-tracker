@@ -57,9 +57,9 @@ function RecentTxnSkeleton() {
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const [data, setData]     = useState(null)
+  const [data, setData]       = useState(null)
   const [loading, setLoading] = useState(true)
-  const [error, setError]   = useState('')
+  const [error, setError]     = useState('')
 
   useEffect(() => {
     const fetchDashboard = async () => {
@@ -77,8 +77,10 @@ export default function Dashboard() {
     fetchDashboard()
   }, [])
 
-  // ── Current month label ────────────────────────────────────
-  const currentMonth = new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })
+  // ── Month label based on latest transaction date or current date ──
+  const activeMonthLabel = data?.recentTransactions?.length > 0
+    ? new Date(data.recentTransactions[0].date + 'T00:00:00').toLocaleString('en-US', { month: 'long', year: 'numeric' })
+    : new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })
 
   // ── Derived values ─────────────────────────────────────────
   const maxSpend = data?.spendByCategory?.length
@@ -93,7 +95,7 @@ export default function Dashboard() {
     ? data.leftToBudget >= 0
     : null
 
-  // ── Empty state (no transactions at all) ───────────────────
+  // ── Has data condition ─────────────────────────────────────
   const hasData = data && (data.totalSpent > 0 || data.recentTransactions?.length > 0)
 
   // ── Error state ────────────────────────────────────────────
@@ -116,7 +118,7 @@ export default function Dashboard() {
       {/* Header */}
       <div className="page-header">
         <h2 className="page-title">Dashboard</h2>
-        <span className="page-meta">{currentMonth}</span>
+        <span className="page-meta">{activeMonthLabel}</span>
       </div>
 
       {/* ── Stat Cards ── */}
@@ -141,7 +143,7 @@ export default function Dashboard() {
                   {parseFloat(pctChange) > 0 ? '+' : ''}{pctChange}% vs last month
                 </span>
               ) : (
-                <span className="stat-sub">No prior month data</span>
+                <span className="stat-sub">Monthly total</span>
               )}
             </div>
 
@@ -177,19 +179,19 @@ export default function Dashboard() {
         )}
       </div>
 
-      {/* ── Empty state ── */}
+      {/* ── Empty state (only when no data and not loading) ── */}
       {!loading && !hasData && (
         <div className="empty-state">
           <UploadCloud size={40} strokeWidth={1.5} />
-          <p className="empty-state-title">No data yet</p>
-          <p className="empty-state-sub">Upload your first bank statement to see your spending breakdown.</p>
+          <p className="empty-state-title">No transactions yet</p>
+          <p className="empty-state-sub">Upload your statement or review your uploaded transactions to populate your dashboard.</p>
           <Link to="/upload" className="btn-primary" style={{ textDecoration: 'none' }}>
             Upload statement
           </Link>
         </div>
       )}
 
-      {/* ── Main Grid (only when there's data) ── */}
+      {/* ── Main Grid (when there is data) ── */}
       {(loading || hasData) && (
         <div className="dashboard-grid">
           {/* Spend by Category */}
@@ -216,7 +218,7 @@ export default function Dashboard() {
                         </div>
                       </div>
                     ))
-                  : <p style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>No spending data this month.</p>
+                  : <p style={{ color: 'var(--color-text-muted)', fontSize: 13 }}>No categorized spending data.</p>
               }
             </div>
           </div>
