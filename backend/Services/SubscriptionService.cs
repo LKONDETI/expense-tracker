@@ -21,35 +21,46 @@ public class SubscriptionService(AppDbContext db) : ISubscriptionService
     {
         var transactions = await db.Transactions
             .Where(t => t.UserId == userId &&
-                        t.Category == TransactionCategory.Subscriptions)
+                        (t.Category == TransactionCategory.Subscriptions || t.Category.ToLower() == "subscriptions"))
             .OrderBy(t => t.Date)
             .ToListAsync();
+
+        if (transactions.Count == 0)
+            return new List<SubscriptionDto>();
+
+        var maxTxnDate = transactions.Max(t => t.Date).ToDateTime(TimeOnly.MinValue);
 
         // Group by normalized merchant name
         var grouped = transactions
             .GroupBy(t => NormalizeMerchant(t.Description))
-            .Where(g => g.Count() >= 2)  // must appear 2+ times = recurring
             .ToList();
 
         var result = new List<SubscriptionDto>();
 
         foreach (var group in grouped)
         {
-            var items    = group.OrderByDescending(t => t.Date).ToList();
-            var latest   = items.First();
-            var prev     = items.Skip(1).First();
-
-            // Detect if price went up
+            var items     = group.OrderByDescending(t => t.Date).ToList();
+            var latest    = items.First();
             var latestAmt = Math.Abs(latest.Amount);
-            var prevAmt   = Math.Abs(prev.Amount);
-            var status    = latestAmt > prevAmt ? "up" : "flat";
 
-            // Mark unused: no transaction in the last 45 days
-            var daysSinceLast = (DateTime.UtcNow - latest.Date.ToDateTime(TimeOnly.MinValue)).TotalDays;
-            if (daysSinceLast > 45) status = "unused";
+            var status = "flat";
+            if (items.Count >= 2)
+            {
+                var prev    = items[1];
+                var prevAmt = Math.Abs(prev.Amount);
+                if (latestAmt > prevAmt) status = "up";
+            }
+
+            // Mark unused: no transaction in the last 45 days relative to now and user's statement period
+            var daysSinceNow = (DateTime.UtcNow - latest.Date.ToDateTime(TimeOnly.MinValue)).TotalDays;
+            var daysSinceLatestTxn = (maxTxnDate - latest.Date.ToDateTime(TimeOnly.MinValue)).TotalDays;
+            if (daysSinceNow > 45 && daysSinceLatestTxn > 45)
+            {
+                status = "unused";
+            }
 
             result.Add(new SubscriptionDto(
-                Merchant:   group.Key,
+                Merchant:   latest.Description.Trim(),
                 Amount:     latestAmt,
                 RenewalDay: latest.Date.Day,
                 Status:     status
@@ -60,7 +71,7 @@ public class SubscriptionService(AppDbContext db) : ISubscriptionService
     }
 
     private static string NormalizeMerchant(string desc) =>
-        desc.ToLower().Trim().Split(' ')[0]; // simple normalization: first word
+        desc.ToLower().Trim();
 }
 
 public interface IInsightService

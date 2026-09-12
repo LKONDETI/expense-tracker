@@ -13,6 +13,9 @@ backend/appsettings.*.json
 !backend/appsettings.json
 backend/*.user
 backend/.vs/
+backend/.local/
+backend/.nuget/
+backend/Library/
 
 # ── Database / Secrets ────────────────────────────────────────
 *.env
