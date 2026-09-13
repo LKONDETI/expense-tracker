@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { useNavigate } from 'react-router-dom'
 import { ShieldCheck, EyeOff, Trash2, AlertTriangle, Loader2, CheckCircle2 } from 'lucide-react'
 import { api } from '../../utils/api'
 
@@ -12,11 +13,13 @@ const PII_ITEMS = [
 ]
 
 export default function Privacy() {
-  const [showModal, setShowModal]   = useState(false)
-  const [confirmText, setConfirmText] = useState('')
-  const [deleting, setDeleting]     = useState(false)
-  const [deleted, setDeleted]       = useState(false)
-  const [error, setError]           = useState('')
+  const navigate = useNavigate()
+
+  const [showModal,    setShowModal]    = useState(false)
+  const [confirmText,  setConfirmText]  = useState('')
+  const [deleting,     setDeleting]     = useState(false)
+  const [deleted,      setDeleted]      = useState(false)
+  const [error,        setError]        = useState('')
 
   const handleDelete = async () => {
     if (confirmText.toLowerCase() !== 'delete') return
@@ -53,9 +56,21 @@ export default function Privacy() {
 
       {/* Success Notification */}
       {deleted && (
-        <div className="privacy-success-banner" role="status">
+        <div className="privacy-success-banner" role="status" style={{ marginBottom: 'var(--space-5)' }}>
           <CheckCircle2 size={16} />
-          <span>All transactions, statements, and budget settings have been permanently deleted.</span>
+          <div>
+            <strong>All data deleted.</strong>
+            <span style={{ marginLeft: 8 }}>
+              Transactions, statements, and budget settings have been permanently removed.
+            </span>
+            <button
+              onClick={() => navigate('/upload')}
+              className="btn-primary"
+              style={{ marginLeft: 16, fontSize: 13, padding: '6px 14px' }}
+            >
+              Upload a new statement
+            </button>
+          </div>
         </div>
       )}
 
@@ -69,7 +84,11 @@ export default function Privacy() {
           {PII_ITEMS.map((item) => (
             <div
               key={item.label}
-              style={{ display: 'flex', justifyContent: 'space-between', padding: 'var(--space-3) 0', borderBottom: '1px solid var(--color-border-light)' }}
+              style={{
+                display: 'flex', justifyContent: 'space-between',
+                padding: 'var(--space-3) 0',
+                borderBottom: '1px solid var(--color-border-light)',
+              }}
             >
               <span style={{ fontSize: 14, fontWeight: 500, color: 'var(--color-text-primary)' }}>
                 ✓ {item.label}
@@ -87,7 +106,8 @@ export default function Privacy() {
           <p className="card-title" style={{ margin: 0 }}>What we store</p>
         </div>
         <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', lineHeight: 1.7 }}>
-          Only anonymized transaction data is stored: <strong>date</strong>, <strong>merchant name</strong>, <strong>amount</strong>, and <strong>category</strong>.
+          Only anonymized transaction data is stored: <strong>date</strong>, <strong>merchant name</strong>,{' '}
+          <strong>amount</strong>, and <strong>category</strong>.
           No account identifiers, personal names, or sensitive financial details are ever written to the database.
           All data is scoped to your account — no other user can access your records.
         </p>
@@ -101,17 +121,21 @@ export default function Privacy() {
       >
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 'var(--space-3)' }}>
           <Trash2 size={20} color="var(--color-danger)" />
-          <p className="card-title" style={{ margin: 0, color: 'var(--color-danger)' }}>Danger Zone: Delete all data</p>
+          <p className="card-title" style={{ margin: 0, color: 'var(--color-danger)' }}>
+            Danger Zone: Delete all data
+          </p>
         </div>
         <p style={{ fontSize: 14, color: 'var(--color-text-secondary)', marginBottom: 'var(--space-4)' }}>
-          Permanently erase all your uploaded statements, categorized transactions, and budget data from the database. Your user account and login will remain active.
+          Permanently erase all your uploaded statements, categorized transactions, and budget data from the database.
+          Your user account and login will remain active.
         </p>
         <button
           id="btn-delete-all-data"
           className="btn-danger-action"
           onClick={openModal}
+          disabled={deleted}
         >
-          <Trash2 size={14} /> Delete all my data
+          <Trash2 size={14} /> {deleted ? 'Data deleted' : 'Delete all my data'}
         </button>
       </div>
 
@@ -137,10 +161,14 @@ export default function Privacy() {
 
             <div className="modal-body">
               <p style={{ fontSize: 13, color: 'var(--color-text-secondary)', lineHeight: 1.5, marginBottom: 'var(--space-4)' }}>
-                All of your uploaded statements, transaction history, custom category mappings, and budgets will be permanently wiped from the database.
+                All of your uploaded statements, transaction history, custom category mappings, and budgets will be
+                permanently wiped from the database.
               </p>
 
-              <label htmlFor="confirm-delete-input" style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 'var(--space-2)' }}>
+              <label
+                htmlFor="confirm-delete-input"
+                style={{ display: 'block', fontSize: 13, fontWeight: 600, color: 'var(--color-text-primary)', marginBottom: 'var(--space-2)' }}
+              >
                 Type <strong style={{ color: 'var(--color-danger)' }}>DELETE</strong> to confirm:
               </label>
               <input
