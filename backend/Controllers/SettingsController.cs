@@ -38,29 +38,45 @@ public class SettingsController(AppDbContext db) : ControllerBase
     [ProducesResponseType(204)]
     public async Task<IActionResult> UpdateSettings([FromBody] UpdateSettingsRequest req)
     {
-        var user = await db.Users
-            .Include(u => u.CategoryBudgets)
-            .FirstAsync(u => u.Id == UserId);
+        // 1. Update overall monthly budget on the user row
+        await db.Users
+            .Where(u => u.Id == UserId)
+            .ExecuteUpdateAsync(s => s.SetProperty(u => u.MonthlyBudget, req.MonthlyBudget));
 
-        user.MonthlyBudget = req.MonthlyBudget;
+        // 2. Load existing category budget IDs for this user
+        var existing = await db.CategoryBudgets
+            .Where(b => b.UserId == UserId)
+            .ToListAsync();
 
         foreach (var dto in req.CategoryBudgets)
         {
-            var existing = user.CategoryBudgets.FirstOrDefault(b => b.Category == dto.Category);
-            if (existing is null)
-                user.CategoryBudgets.Add(new CategoryBudget
+            var match = existing.FirstOrDefault(b =>
+                string.Equals(b.Category, dto.Category, StringComparison.OrdinalIgnoreCase));
+
+            if (match is null)
+            {
+                // Insert — no concurrency token involved
+                db.CategoryBudgets.Add(new CategoryBudget
                 {
                     UserId   = UserId,
                     Category = dto.Category,
                     Amount   = dto.Amount,
+                    UpdatedAt = DateTime.UtcNow,
                 });
+            }
             else
             {
-                existing.Amount    = dto.Amount;
-                existing.UpdatedAt = DateTime.UtcNow;
+                // Update directly via ExecuteUpdateAsync — bypasses change-tracker
+                // and avoids the UpdatedAt concurrency mismatch entirely
+                await db.CategoryBudgets
+                    .Where(b => b.Id == match.Id)
+                    .ExecuteUpdateAsync(s => s
+                        .SetProperty(b => b.Amount,    dto.Amount)
+                        .SetProperty(b => b.UpdatedAt, DateTime.UtcNow));
             }
         }
 
+        // Flush any inserts queued above
         await db.SaveChangesAsync();
         return NoContent();
     }
