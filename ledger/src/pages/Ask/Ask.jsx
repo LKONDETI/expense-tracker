@@ -1,36 +1,53 @@
 import { useState, useRef, useEffect } from 'react'
-import { SendHorizontal, Bot } from 'lucide-react'
-import { SAMPLE_CHAT, SUGGESTED_QUESTIONS } from '../../data/mockData'
+import { SendHorizontal, Sparkles, AlertCircle } from 'lucide-react'
+import { api } from '../../utils/api'
 
-// Simulated AI responses based on keyword matching (replace with real API in Phase 1)
-const simulateResponse = (question) => {
-  const q = question.toLowerCase()
-  if (q.includes('dining'))
-    return 'Your dining spend this month is $412.00 — up 22% from your 3-month average of $337. Most of it (about $280) happened on weekdays between 11am–2pm.'
-  if (q.includes('budget'))
-    return "You've spent $3,214.62 of your $4,000 monthly budget. That leaves $785.38 — you're on track, but projected to reach $4,120 by month end at current pace."
-  if (q.includes('subscri'))
-    return 'You have 7 active subscriptions totaling $142.45/month. Your gym membership ($39/mo) appears unused — no associated activity detected in 45 days.'
-  if (q.includes('biggest') || q.includes('largest'))
-    return 'Your biggest expenses this month: Housing/Rent $1,450 · Dining $412 · Shopping $305 · Groceries $380.'
-  if (q.includes('cancel'))
-    return 'Based on your usage patterns, I\'d suggest reviewing: Gym Membership ($39/mo, unused 45+ days) and Adobe Creative Cloud ($54.99/mo, marked "Up"). Together that\'s $93.99/mo saved.'
-  return "I can answer questions about your spending using your transaction data. Try asking about a specific category, your budget status, or subscriptions."
+const SUGGESTED_QUESTIONS = [
+  'How much did I spend on dining this month?',
+  'What is my budget status?',
+  'Which subscriptions look unused?',
+  'What were my biggest expenses?',
+  'Should I cancel any subscriptions?',
+]
+
+// ── Thinking bubble ───────────────────────────────────────────
+function ThinkingBubble() {
+  return (
+    <div className="message assistant" id="message-thinking">
+      <div className="message-bubble" style={{ color: 'var(--color-text-muted)', display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span style={{ display: 'inline-flex', gap: 3 }}>
+          {[0, 1, 2].map((i) => (
+            <span
+              key={i}
+              style={{
+                width: 6, height: 6, borderRadius: '50%',
+                background: 'var(--color-text-muted)',
+                display: 'inline-block',
+                animation: `bounce 1.2s ease-in-out ${i * 0.2}s infinite`,
+              }}
+            />
+          ))}
+        </span>
+        Thinking…
+      </div>
+    </div>
+  )
 }
 
 export default function Ask() {
-  const [messages, setMessages] = useState(SAMPLE_CHAT)
-  const [input, setInput] = useState('')
-  const [loading, setLoading] = useState(false)
+  const [messages, setMessages] = useState([])   // start clean — no mock chat
+  const [input,    setInput]    = useState('')
+  const [loading,  setLoading]  = useState(false)
+  const [apiError, setApiError] = useState('')
   const bottomRef = useRef(null)
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [messages])
+  }, [messages, loading])
 
-  const sendMessage = (text) => {
+  const sendMessage = async (text) => {
     const q = text.trim()
-    if (!q) return
+    if (!q || loading) return
 
     const now = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })
 
@@ -40,20 +57,26 @@ export default function Ask() {
     ])
     setInput('')
     setLoading(true)
+    setApiError('')
 
-    // Simulate network delay → replace with fetch('/api/ask', ...) in Phase 1
-    setTimeout(() => {
+    try {
+      const data = await api.post('/api/ask', { question: q })
+      const answer = data?.answer ?? data?.Answer ?? 'No response received.'
+
       setMessages((prev) => [
         ...prev,
         {
-          id: Date.now() + 1,
+          id:   Date.now() + 1,
           role: 'assistant',
-          text: simulateResponse(q),
+          text: answer,
           time: new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }),
         },
       ])
+    } catch (err) {
+      setApiError(err.message || 'Failed to get a response. Please try again.')
+    } finally {
       setLoading(false)
-    }, 900)
+    }
   }
 
   const handleKeyDown = (e) => {
@@ -62,6 +85,8 @@ export default function Ask() {
       sendMessage(input)
     }
   }
+
+  const isEmpty = messages.length === 0
 
   return (
     <div className="page-fade-in">
@@ -73,19 +98,47 @@ export default function Ask() {
         </div>
       </div>
 
-      {/* Suggested Questions */}
-      <div className="suggested-questions" aria-label="Suggested questions">
-        {SUGGESTED_QUESTIONS.map((q) => (
-          <button
-            key={q}
-            className="suggested-q"
-            onClick={() => sendMessage(q)}
-            id={`suggested-q-${q.slice(0, 20).replace(/\s+/g, '-').toLowerCase()}`}
-          >
-            {q}
-          </button>
-        ))}
-      </div>
+      {/* Suggested Questions — shown until first message sent */}
+      {isEmpty && (
+        <div className="suggested-questions" aria-label="Suggested questions">
+          {SUGGESTED_QUESTIONS.map((q) => (
+            <button
+              key={q}
+              className="suggested-q"
+              onClick={() => sendMessage(q)}
+              disabled={loading}
+              id={`suggested-q-${q.slice(0, 20).replace(/\s+/g, '-').toLowerCase()}`}
+            >
+              {q}
+            </button>
+          ))}
+        </div>
+      )}
+
+      {/* Empty hero — shown before any message */}
+      {isEmpty && (
+        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: 'var(--space-10) 0', color: 'var(--color-text-muted)' }}>
+          <Sparkles size={40} strokeWidth={1.5} />
+          <p style={{ fontSize: 15, fontWeight: 500, color: 'var(--color-text-secondary)' }}>
+            Ask anything about your spending
+          </p>
+          <p style={{ fontSize: 13, textAlign: 'center', maxWidth: 340, lineHeight: 1.6 }}>
+            Your questions are answered using only your own transaction data — nothing is shared.
+          </p>
+        </div>
+      )}
+
+      {/* API Error Banner */}
+      {apiError && (
+        <div
+          className="upload-error-banner"
+          style={{ marginBottom: 'var(--space-4)', display: 'flex', alignItems: 'center', gap: 8 }}
+        >
+          <AlertCircle size={15} />
+          {apiError}
+          <button className="upload-error-dismiss" onClick={() => setApiError('')}>Dismiss</button>
+        </div>
+      )}
 
       {/* Chat Area */}
       <div className="ask-container">
@@ -107,13 +160,7 @@ export default function Ask() {
             </div>
           ))}
 
-          {loading && (
-            <div className="message assistant" id="message-loading">
-              <div className="message-bubble" style={{ color: 'var(--color-text-muted)' }}>
-                Thinking…
-              </div>
-            </div>
-          )}
+          {loading && <ThinkingBubble />}
 
           <div ref={bottomRef} />
         </div>
@@ -142,6 +189,14 @@ export default function Ask() {
           </button>
         </div>
       </div>
+
+      {/* Bounce animation keyframes */}
+      <style>{`
+        @keyframes bounce {
+          0%, 80%, 100% { transform: translateY(0); }
+          40% { transform: translateY(-6px); }
+        }
+      `}</style>
     </div>
   )
 }
