@@ -1,5 +1,5 @@
 import { useState, useRef, useEffect } from 'react'
-import { SendHorizontal, Sparkles, AlertCircle } from 'lucide-react'
+import { SendHorizontal, AlertCircle } from 'lucide-react'
 import { api } from '../../utils/api'
 
 const SUGGESTED_QUESTIONS = [
@@ -86,8 +86,6 @@ export default function Ask() {
     }
   }
 
-  const isEmpty = messages.length === 0
-
   return (
     <div className="page-fade-in">
       {/* Header */}
@@ -99,7 +97,7 @@ export default function Ask() {
       </div>
 
       {/* Suggested Questions — shown until first message sent */}
-      {isEmpty && (
+      {messages.length === 0 && (
         <div className="suggested-questions" aria-label="Suggested questions">
           {SUGGESTED_QUESTIONS.map((q) => (
             <button
@@ -115,18 +113,7 @@ export default function Ask() {
         </div>
       )}
 
-      {/* Empty hero — shown before any message */}
-      {isEmpty && (
-        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: 'var(--space-10) 0', color: 'var(--color-text-muted)' }}>
-          <Sparkles size={40} strokeWidth={1.5} />
-          <p style={{ fontSize: 15, fontWeight: 500, color: 'var(--color-text-secondary)' }}>
-            Ask anything about your spending
-          </p>
-          <p style={{ fontSize: 13, textAlign: 'center', maxWidth: 340, lineHeight: 1.6 }}>
-            Your questions are answered using only your own transaction data — nothing is shared.
-          </p>
-        </div>
-      )}
+
 
       {/* API Error Banner */}
       {apiError && (
