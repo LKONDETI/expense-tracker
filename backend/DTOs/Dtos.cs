@@ -56,6 +56,15 @@ public record ConfirmStatementRequest(
     List<ParsedTransactionDto> Transactions  // user-reviewed/corrected
 );
 
+public record StatementSummaryDto(
+    Guid Id,
+    string FileName,
+    DateTime UploadedAt,
+    DateOnly? DateRangeStart,
+    DateOnly? DateRangeEnd,
+    int TransactionCount
+);
+
 // ── Subscriptions ─────────────────────────────────────────────
 public record SubscriptionDto(
     string Merchant,

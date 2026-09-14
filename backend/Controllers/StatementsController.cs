@@ -1,8 +1,10 @@
 using System.Security.Claims;
+using Ledger.API.Data;
 using Ledger.API.DTOs;
 using Ledger.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace Ledger.API.Controllers;
 
@@ -10,15 +12,34 @@ namespace Ledger.API.Controllers;
 [Route("api/[controller]")]
 [Authorize]
 [Produces("application/json")]
-public class StatementsController(IStatementService statementService) : ControllerBase
+public class StatementsController(IStatementService statementService, AppDbContext db) : ControllerBase
 {
     private Guid UserId => Guid.Parse(User.FindFirstValue(ClaimTypes.NameIdentifier)
         ?? User.FindFirstValue("sub")!);
 
     /// <summary>
-    /// Upload a PDF bank statement. Returns AI-parsed transactions for user review — NOT yet saved to DB.
-    /// The user must call POST /api/statements/confirm to save after reviewing.
+    /// List all statements uploaded by the current user, with transaction counts.
     /// </summary>
+    [HttpGet]
+    [ProducesResponseType(typeof(List<StatementSummaryDto>), 200)]
+    public async Task<IActionResult> GetStatements()
+    {
+        var statements = await db.Statements
+            .Where(s => s.UserId == UserId)
+            .OrderByDescending(s => s.UploadedAt)
+            .Select(s => new StatementSummaryDto(
+                s.Id,
+                s.FileName,
+                s.UploadedAt,
+                s.DateRangeStart,
+                s.DateRangeEnd,
+                s.Transactions.Count
+            ))
+            .ToListAsync();
+
+        return Ok(statements);
+    }
+
     [HttpPost("upload")]
     [Consumes("multipart/form-data")]
     [ProducesResponseType(typeof(UploadResponse), 200)]
