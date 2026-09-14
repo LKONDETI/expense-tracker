@@ -114,9 +114,14 @@ export default function Upload() {
     setHistoryError('')
     try {
       const data = await api.get('/api/statements')
-      setHistory(data || [])
+      setHistory(Array.isArray(data) ? data : [])
     } catch (err) {
-      setHistoryError(err.message || 'Could not load statement history.')
+      // 404 just means no statements exist yet — treat as empty, not an error
+      if (err.status === 404) {
+        setHistory([])
+      } else {
+        setHistoryError(err.message || 'Could not load statement history.')
+      }
     } finally {
       setHistoryLoading(false)
     }
