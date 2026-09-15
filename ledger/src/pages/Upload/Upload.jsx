@@ -287,23 +287,49 @@ export default function Upload() {
             onChange={handleFileInput}
           />
           {uploadState === 'uploading' ? (
-            <>
-              <Loader2 className="upload-icon upload-spinner" />
-              <h3>Parsing {selectedFile?.name}…</h3>
-              <p>Extracting transactions — this may take a few seconds</p>
-            </>
+            /* ── Uploading: spinner + filename left-aligned ── */
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, width: '100%' }}>
+              <Loader2 size={36} className="upload-spinner" style={{ flexShrink: 0, color: 'var(--color-brand)' }} />
+              <div>
+                <p style={{ margin: 0, fontWeight: 600, fontSize: 15, color: 'var(--color-text-primary)' }}>
+                  Parsing {selectedFile?.name}…
+                </p>
+                <p style={{ margin: '4px 0 0', fontSize: 13, color: 'var(--color-text-muted)' }}>
+                  Extracting transactions — this may take a few seconds
+                </p>
+              </div>
+            </div>
           ) : (
-            <>
-              <UploadCloud className="upload-icon" />
-              <h3>Drag your PDF statement here</h3>
-              <p>or click to choose a file · PDF only · max 20MB</p>
+            /* ── Idle: icon + text left, button right ── */
+            <div style={{ display: 'flex', alignItems: 'center', gap: 16, width: '100%' }}>
+              {/* Icon badge */}
+              <div style={{
+                width: 48, height: 48, borderRadius: 12, flexShrink: 0,
+                background: 'var(--color-brand-light, #eff6ff)',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                <UploadCloud size={24} color="var(--color-brand)" />
+              </div>
+
+              {/* Text */}
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <p style={{ margin: 0, fontWeight: 600, fontSize: 15, color: 'var(--color-text-primary)' }}>
+                  Drag your PDF statement here
+                </p>
+                <p style={{ margin: '3px 0 0', fontSize: 13, color: 'var(--color-text-muted)' }}>
+                  PDF only · max 20 MB · your file is never stored
+                </p>
+              </div>
+
+              {/* Button */}
               <button
                 className="btn-primary"
+                style={{ flexShrink: 0 }}
                 onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click() }}
               >
                 Choose file
               </button>
-            </>
+            </div>
           )}
         </div>
       )}
