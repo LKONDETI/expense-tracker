@@ -1,6 +1,6 @@
 import { NavLink, useNavigate } from 'react-router-dom'
 import {
-  LayoutDashboard, Upload, List, RefreshCw,
+  LayoutDashboard, Upload, List, RefreshCw, BarChart2,
   Lightbulb, MessageCircle, ShieldCheck, Settings, LogOut,
 } from 'lucide-react'
 import { useAuth } from '../../context/AuthContext'
@@ -10,6 +10,7 @@ const NAV_ITEMS = [
   { to: '/upload',        icon: Upload,          label: 'Upload' },
   { to: '/transactions',  icon: List,            label: 'Transactions' },
   { to: '/subscriptions', icon: RefreshCw,       label: 'Subscriptions' },
+  { to: '/analytics',     icon: BarChart2,       label: 'Analytics' },
   { to: '/insights',      icon: Lightbulb,       label: 'Insights' },
   { to: '/ask',           icon: MessageCircle,   label: 'Ask' },
   { to: '/privacy',       icon: ShieldCheck,     label: 'Privacy & Security' },

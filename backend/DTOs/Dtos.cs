@@ -99,3 +99,22 @@ public record UpdateSettingsRequest(
 );
 
 public record CategoryBudgetDto(string Category, decimal Amount);
+
+// ── Analytics ─────────────────────────────────────────────────
+public record AnalyticsResponse(
+    List<MonthlyTotalDto>  MonthlyTotals,
+    List<CategoryMonthDto> CategoryByMonth
+);
+
+public record MonthlyTotalDto(
+    string  Month,     // "2026-01"
+    string  Label,     // "Jan 2026"
+    decimal Expenses,
+    decimal Income
+);
+
+public record CategoryMonthDto(
+    string  Month,     // "2026-01"
+    string  Category,
+    decimal Amount
+);
