@@ -77,10 +77,24 @@ export default function Dashboard() {
     fetchDashboard()
   }, [])
 
-  // ── Month label based on latest transaction date or current date ──
-  const activeMonthLabel = data?.recentTransactions?.length > 0
-    ? new Date(data.recentTransactions[0].date + 'T00:00:00').toLocaleString('en-US', { month: 'long', year: 'numeric' })
-    : new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })
+  // ── Date range label for the period being shown ─────────────
+  const targetTxns = data?.recentTransactions  // we'll compute range from spendByCategory context
+  // Use the dashboard's stat window: earliest + latest transaction date in current period
+  const fmtShort = (dateStr) => {
+    if (!dateStr) return ''
+    const d = new Date(dateStr + 'T00:00:00')
+    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+  }
+  const fmtYear = (dateStr) => {
+    if (!dateStr) return ''
+    return new Date(dateStr + 'T00:00:00').getFullYear()
+  }
+
+  const activeMonthLabel = data?.periodStart && data?.periodEnd
+    ? `${fmtShort(data.periodStart)} – ${fmtShort(data.periodEnd)}, ${fmtYear(data.periodEnd)}`
+    : data?.recentTransactions?.length > 0
+      ? new Date(data.recentTransactions[0].date + 'T00:00:00').toLocaleString('en-US', { month: 'long', year: 'numeric' })
+      : new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })
 
   // ── Derived values ─────────────────────────────────────────
   const maxSpend = data?.spendByCategory?.length

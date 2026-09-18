@@ -14,7 +14,9 @@ public record DashboardResponse(
     decimal? MonthlyBudget,
     decimal LeftToBudget,
     List<CategorySpendDto> SpendByCategory,
-    List<TransactionDto> RecentTransactions
+    List<TransactionDto> RecentTransactions,
+    DateOnly? PeriodStart,
+    DateOnly? PeriodEnd
 );
 
 public record CategorySpendDto(string Category, decimal Amount);

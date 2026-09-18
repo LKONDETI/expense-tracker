@@ -73,24 +73,54 @@ public class MockAiService : IAiService
                 var amtMatches = AmountRegex.Matches(block);
                 if (amtMatches.Count == 0) continue;
 
-                var firstAmtMatch = amtMatches[0];
-                string descRaw = block.Substring(0, firstAmtMatch.Index);
+                // ── Amount vs Running Balance disambiguation ──────────────
+                // Bank statements have columns: Amount | Running Balance
+                // PdfPig can emit balance before/after the transaction amount.
+                // Rule: running balance is always the LARGEST number in the row;
+                //       transaction amount is the smaller value.
+                // We parse all amounts, pick the one with the smallest abs value.
+                // If only one amount exists, use it directly.
 
-                string desc = CleanDescription(descRaw);
+                Match? chosenMatch = null;
+                decimal chosenAbsValue = decimal.MaxValue;
+
+                foreach (Match m in amtMatches)
+                {
+                    if (TryParseAmount(m.Groups["amount"].Value, out var v))
+                    {
+                        var absV = Math.Abs(v);
+                        if (absV < chosenAbsValue)
+                        {
+                            chosenAbsValue = absV;
+                            chosenMatch    = m;
+                        }
+                    }
+                }
+
+                if (chosenMatch is null) continue;
+
+                // Description = text between date and the FIRST amount in the block
+                // (regardless of which amount we chose — description always precedes all amounts)
+                string descRaw = block.Substring(0, amtMatches[0].Index);
+                string desc    = CleanDescription(descRaw);
                 if (desc.Length < 2) continue;
 
                 var descLower = desc.ToLower();
                 if (IgnoreHeaderKeywords.Any(k => descLower.Contains(k))) continue;
 
                 if (TryParseDate(currentMatch.Groups["date"].Value, out var date) &&
-                    TryParseAmount(firstAmtMatch.Groups["amount"].Value, out var amount))
+                    TryParseAmount(chosenMatch.Groups["amount"].Value, out var amount))
                 {
+                    // Skip debit sign logic: if the description contains income keywords
+                    // and the amount parsed as positive, keep it positive (credit/income).
+                    // For everything else, negatives are expenses.
                     if (results.Any(r => r.Date == date && r.Description == desc && r.Amount == amount))
                         continue;
 
                     var category = ResolveCategory(desc, knownMerchants);
                     results.Add(new ParsedTransactionDto(date, desc, amount, category));
                 }
+
             }
         }
 
@@ -149,7 +179,18 @@ public class MockAiService : IAiService
                 System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.None, out date))
             {
-                if (date.Year == 1) date = new DateOnly(DateTime.UtcNow.Year, date.Month, date.Day);
+                if (date.Year == 1)
+                {
+                    // Short date (MM/DD) — assign current year by default
+                    var today = DateOnly.FromDateTime(DateTime.UtcNow);
+                    date = new DateOnly(today.Year, date.Month, date.Day);
+
+                    // If the resulting date is more than 30 days in the future,
+                    // it almost certainly belongs to the prior year
+                    // (e.g. uploading in Jan, statement contains a Dec date)
+                    if (date > today.AddDays(30))
+                        date = new DateOnly(today.Year - 1, date.Month, date.Day);
+                }
                 return true;
             }
         }
@@ -157,7 +198,13 @@ public class MockAiService : IAiService
         if (DateTime.TryParse(raw, System.Globalization.CultureInfo.InvariantCulture, System.Globalization.DateTimeStyles.None, out var dt))
         {
             date = DateOnly.FromDateTime(dt);
-            if (date.Year == 1) date = new DateOnly(DateTime.UtcNow.Year, date.Month, date.Day);
+            if (date.Year == 1)
+            {
+                var today = DateOnly.FromDateTime(DateTime.UtcNow);
+                date = new DateOnly(today.Year, date.Month, date.Day);
+                if (date > today.AddDays(30))
+                    date = new DateOnly(today.Year - 1, date.Month, date.Day);
+            }
             return true;
         }
 

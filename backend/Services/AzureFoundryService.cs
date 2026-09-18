@@ -17,9 +17,16 @@ public class AzureFoundryService(IConfiguration config, HttpClient http) : IAiSe
         You are a financial data parser. Extract all transactions from the provided bank/card statement text.
         Return ONLY valid JSON array, no markdown, no explanation.
         Format: [{"date":"YYYY-MM-DD","description":"merchant name","amount":-86.42,"category":"Groceries"}]
-        Amount is negative for debits/expenses, positive for credits.
-        Categories (use exactly one): Housing, Dining, Groceries, Transportation, Subscriptions, Shopping, Insurance, Other.
-        For known merchants provided, use the given category exactly. For unknowns, infer from context.
+
+        CRITICAL RULES:
+        - Amount is NEGATIVE for debits/expenses/withdrawals, POSITIVE for credits/income/deposits.
+        - Bank statements have TWO numeric columns per row: the TRANSACTION AMOUNT and the RUNNING BALANCE.
+          ALWAYS use the transaction amount, NEVER the running balance (the running balance is the larger cumulative total).
+        - Use the ACTUAL DATE printed on the transaction line. Statements often span two calendar months
+          (e.g. Aug 15 – Sep 14). Do NOT change dates to match the statement period — use the real date on each line.
+        - If a year is missing from a date, infer it from surrounding context (statement header or adjacent dated rows).
+        - Categories (use exactly one): Housing, Dining, Groceries, Transportation, Subscriptions, Shopping, Insurance, Other.
+        - For known merchants provided, use the given category exactly. For unknowns, infer from context.
         """;
 
     private const string SystemAsk = """

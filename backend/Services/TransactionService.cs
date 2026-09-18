@@ -122,7 +122,9 @@ public class TransactionService(AppDbContext db) : ITransactionService
                 MonthlyBudget: user.MonthlyBudget,
                 LeftToBudget: user.MonthlyBudget ?? 0m,
                 SpendByCategory: [],
-                RecentTransactions: []
+                RecentTransactions: [],
+                PeriodStart: null,
+                PeriodEnd: null
             );
         }
 
@@ -179,6 +181,10 @@ public class TransactionService(AppDbContext db) : ITransactionService
             .Select(t => new TransactionDto(t.Id, t.Date, t.Description, t.Amount, t.Category))
             .ToList();
 
+        // Actual date range of what's shown in the target month window
+        DateOnly? periodStart = targetMonthTxns.Count > 0 ? targetMonthTxns.Min(t => t.Date) : null;
+        DateOnly? periodEnd   = targetMonthTxns.Count > 0 ? targetMonthTxns.Max(t => t.Date) : null;
+
         return new DashboardResponse(
             totalSpent,
             prevSpent,
@@ -187,7 +193,9 @@ public class TransactionService(AppDbContext db) : ITransactionService
             budget,
             leftBudget,
             spendByCat,
-            recent
+            recent,
+            periodStart,
+            periodEnd
         );
     }
 }
