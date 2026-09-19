@@ -119,7 +119,7 @@ public class AzureFoundryService(IConfiguration config, HttpClient http) : IAiSe
                 new { role = "system",  content = systemPrompt },
                 new { role = "user",    content = userMessage },
             },
-            max_tokens = 4096,
+            max_tokens = 8192,
         };
 
         var request = new HttpRequestMessage(HttpMethod.Post, $"{endpoint}/chat/completions")
