@@ -27,7 +27,8 @@ public record TransactionDto(
     DateOnly Date,
     string Description,
     decimal Amount,
-    string Category
+    string Category,
+    decimal? Balance
 );
 
 public record CreateTransactionRequest(
@@ -50,7 +51,8 @@ public record ParsedTransactionDto(
     DateOnly Date,
     string Description,
     decimal Amount,
-    string Category  // AI-suggested, user can correct before saving
+    string Category,  // AI-suggested, user can correct before saving
+    decimal? Balance = null
 );
 
 public record ConfirmStatementRequest(

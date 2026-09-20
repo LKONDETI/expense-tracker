@@ -15,7 +15,7 @@ const fmt = (n) =>
 function SkeletonRow() {
   return (
     <tr className="skeleton-row">
-      {[80, 200, 100, 80].map((w, i) => (
+      {[80, 200, 100, 80, 80].map((w, i) => (
         <td key={i}><div className="skeleton" style={{ width: w, height: 14 }} /></td>
       ))}
     </tr>
@@ -182,6 +182,7 @@ export default function Transactions() {
                 <th scope="col">Merchant</th>
                 <th scope="col">Category</th>
                 <th scope="col">Amount</th>
+                <th scope="col" className="table-amount" style={{ color: 'var(--color-text-muted)' }}>Balance</th>
                 <th scope="col" style={{ width: 72 }}></th>
               </tr>
             </thead>

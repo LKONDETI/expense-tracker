@@ -141,6 +141,15 @@ public class MockAiService : IAiService
                 txnMatch = amtMatches[1];
             }
 
+            // Second amount = running balance (always positive)
+            decimal? runningBalance = null;
+            if (amtMatches.Count >= 2)
+            {
+                var balMatch = txnMatch == amtMatches[0] ? amtMatches[1] : amtMatches[0];
+                if (TryParseAmountAbs(balMatch.Value, out var balAbs) && balAbs > 0)
+                    runningBalance = balAbs;
+            }
+
             // ── Determine description ─────────────────────────────
             // Everything between the date and the FIRST amount = description
             string descRaw = remainder.Substring(0, amtMatches[0].Index);
@@ -159,7 +168,7 @@ public class MockAiService : IAiService
                 continue;
 
             var category = ResolveCategory(desc, knownMerchants);
-            results.Add(new ParsedTransactionDto(date, desc, amount, category));
+            results.Add(new ParsedTransactionDto(date, desc, amount, category, runningBalance));
         }
 
         if (results.Count == 0)

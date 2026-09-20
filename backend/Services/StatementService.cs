@@ -125,6 +125,7 @@ public class StatementService(AppDbContext db, IAiService ai) : IStatementServic
             Description = t.Description,
             Amount      = t.Amount,
             Category    = t.Category,
+            Balance     = t.Balance,
         }).ToList();
 
         db.Transactions.AddRange(transactions);

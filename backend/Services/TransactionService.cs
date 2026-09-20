@@ -32,7 +32,7 @@ public class TransactionService(AppDbContext db) : ITransactionService
 
         return await query
             .OrderByDescending(t => t.Date)
-            .Select(t => new TransactionDto(t.Id, t.Date, t.Description, t.Amount, t.Category))
+            .Select(t => new TransactionDto(t.Id, t.Date, t.Description, t.Amount, t.Category, t.Balance))
             .ToListAsync();
     }
 
@@ -53,7 +53,7 @@ public class TransactionService(AppDbContext db) : ITransactionService
         db.Transactions.Add(txn);
         await db.SaveChangesAsync();
 
-        return new TransactionDto(txn.Id, txn.Date, txn.Description, txn.Amount, txn.Category);
+        return new TransactionDto(txn.Id, txn.Date, txn.Description, txn.Amount, txn.Category, txn.Balance);
     }
 
     public async Task<bool> UpdateCategoryAsync(Guid userId, Guid transactionId, string category)
@@ -178,7 +178,7 @@ public class TransactionService(AppDbContext db) : ITransactionService
         // Recent 5 transactions
         var recent = allTxns
             .Take(5)
-            .Select(t => new TransactionDto(t.Id, t.Date, t.Description, t.Amount, t.Category))
+            .Select(t => new TransactionDto(t.Id, t.Date, t.Description, t.Amount, t.Category, t.Balance))
             .ToList();
 
         // Actual date range of what's shown in the target month window
