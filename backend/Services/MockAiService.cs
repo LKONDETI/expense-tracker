@@ -5,24 +5,27 @@ namespace Ledger.API.Services;
 
 /// <summary>
 /// Development AI service used when AzureFoundry credentials are not configured.
-/// Parses bank statement text line-by-line — more robust than block-based matching
-/// and handles Chase, BofA, Wells Fargo, Citi, and most common US bank formats.
+/// Parses bank statement text using a robust multi-pass approach:
+///   1. Splits text on real newlines AND on whitespace gaps that indicate column boundaries
+///   2. Finds date-anchored lines (date at start of segment)
+///   3. Per segment: picks the smallest amount (transaction amt) vs largest (running balance)
+///   4. Detects sign from CR/DR keywords and parentheses, not just a leading minus
 /// </summary>
 public class MockAiService : IAiService
 {
-    // Date at or near the START of a line (within first 12 chars).
-    // Handles: 01/15, 1/5, 01/15/26, 01/15/2026, 2026-01-15, Jan 15, January 15 2026
+    // Date at the very start of a segment (allows leading whitespace only)
     private static readonly Regex LineDateRegex = new Regex(
         @"^\s*(?<date>\d{4}[/\-]\d{1,2}[/\-]\d{1,2}|\d{1,2}[/\-]\d{1,2}(?:[/\-]\d{2,4})?|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2}(?:,?\s+\d{2,4})?)\s+",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    // Amounts anywhere in the line: (6.75), -$42.10, $2,450.00, 15.49, 1,456.09
+    // Amounts: (6.75)  -$42.10  $2,450.00  -10.44  - 10.44  10.44
+    // Crucially: capture the leading minus EVEN when there is a space between - and digits
     private static readonly Regex AmountRegex = new Regex(
-        @"(?<amount>\(\s*\$?\s*[\d,]+\.\d{2}\s*\)|-?\s*\$\s*[\d,]+\.\d{2}|(?<!\d)[\d,]+\.\d{2}(?!\d))",
+        @"(?<amount>\(\s*\$?\s*[\d,]+\.\d{2}\s*\)|(?<neg>-)\s*\$?\s*[\d,]+\.\d{2}|\$\s*[\d,]+\.\d{2}|(?<!\d)[\d,]+\.\d{2}(?!\d))",
         RegexOptions.Compiled);
 
     // Lines that are definitely NOT transactions
-    private static readonly string[] SkipLinePatterns =
+    private static readonly string[] SkipPatterns =
     [
         "beginning balance", "ending balance", "opening balance", "closing balance",
         "statement period", "account ending", "account number",
@@ -33,6 +36,7 @@ public class MockAiService : IAiService
         "thank you", "customer service", "member since", "rewards",
         "interest charge", "finance charge", "fees charged",
         "deposits/credits", "checks/debits", "electronic payments",
+        "daily balance", "account summary",
     ];
 
     private static readonly (string[] keywords, string category)[] CategoryRules =
@@ -79,75 +83,86 @@ public class MockAiService : IAiService
           "liberty mutual", "travelers", "hartford"], "Insurance"),
     ];
 
+    // Income / credit keywords — if description contains these AND no explicit debit signal, treat as positive
+    private static readonly string[] CreditKeywords =
+    [
+        "payroll", "direct deposit", "ppd", "ach deposit", "deposit", "refund",
+        "credit", "transfer in", "payment received", "reversal", "zelle in",
+        "cashback", "reimburs", "interest paid",
+    ];
+
+    // Debit / expense keywords
+    private static readonly string[] DebitKeywords =
+    [
+        "card purchase", "purchase", "pos debit", "ach debit", "withdrawal",
+        "payment to", "autopay", "bill pay", "check", "fee", "atm",
+        "transfer out", "zelle out", "wire",
+    ];
+
     public Task<List<ParsedTransactionDto>> ExtractTransactionsAsync(
         string pdfText, Dictionary<string, string> knownMerchants)
     {
-        var results = new List<ParsedTransactionDto>();
-
         if (string.IsNullOrWhiteSpace(pdfText))
             return Task.FromResult(Fallback());
 
-        // ── Line-by-line parsing ──────────────────────────────────
-        // Split on real newlines; also split on sequences of 3+ spaces
-        // (PdfPig sometimes concatenates columns with whitespace instead of newlines)
-        var lines = pdfText
+        // ── Step 1: split into segments ───────────────────────────
+        // PdfPig sometimes emits several transactions on one text line separated
+        // by large whitespace gaps. We split on BOTH real newlines and on gaps of
+        // 4+ spaces so each physical bank-statement row becomes its own segment.
+        var rawSegments = pdfText
             .Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries)
-            .SelectMany(line => SplitOnColumnBoundary(line))
+            .SelectMany(line => Regex.Split(line, @"(?<=\d)\s{4,}(?=\d{1,2}[/\-])"))
             .ToList();
 
-        foreach (var rawLine in lines)
-        {
-            var line = rawLine.Trim();
-            if (line.Length < 5) continue;
+        var results = new List<ParsedTransactionDto>();
 
-            // Skip known header / footer / summary lines
-            var lineLower = line.ToLower();
-            if (SkipLinePatterns.Any(p => lineLower.Contains(p))) continue;
+        foreach (var rawSeg in rawSegments)
+        {
+            var seg = rawSeg.Trim();
+            if (seg.Length < 5) continue;
 
             // Must start with a date
-            var dateMatch = LineDateRegex.Match(line);
+            var dateMatch = LineDateRegex.Match(seg);
             if (!dateMatch.Success) continue;
             if (!TryParseDate(dateMatch.Groups["date"].Value, out var date)) continue;
 
-            // The rest of the line after the date is "description + amounts"
-            string remainder = line.Substring(dateMatch.Index + dateMatch.Length);
+            // Everything after the date
+            string remainder = seg.Substring(dateMatch.Index + dateMatch.Length).Trim();
+
+            // Skip known header/footer lines
+            var lower = seg.ToLower();
+            if (SkipPatterns.Any(p => lower.Contains(p))) continue;
 
             // Find all amounts in the remainder
             var amtMatches = AmountRegex.Matches(remainder).Cast<Match>().ToList();
             if (amtMatches.Count == 0) continue;
 
-            // ── Amount vs Running Balance disambiguation ───────────
+            // ── Step 2: pick the transaction amount ───────────────
             // Running balance = largest absolute value on the line.
             // Transaction amount = smallest absolute value.
+            // We keep track of both the value AND the full match for sign extraction.
             Match? chosenMatch = null;
             decimal chosenAbs  = decimal.MaxValue;
 
             foreach (var m in amtMatches)
             {
-                if (TryParseAmount(m.Groups["amount"].Value, out var v))
+                if (TryParseAmountAbs(m.Value, out var abs) && abs < chosenAbs)
                 {
-                    var abs = Math.Abs(v);
-                    if (abs < chosenAbs)
-                    {
-                        chosenAbs   = abs;
-                        chosenMatch = m;
-                    }
+                    chosenAbs   = abs;
+                    chosenMatch = m;
                 }
             }
-            if (chosenMatch is null) continue;
+            if (chosenMatch is null || chosenAbs == 0m) continue;
 
-            // Description = everything between the date and the FIRST amount
+            // ── Step 3: determine description (before first amount) ──
             string descRaw = remainder.Substring(0, amtMatches[0].Index);
             string desc    = CleanDescription(descRaw);
-
-            // Skip if description is too short or looks like a header
             if (desc.Length < 2) continue;
-            if (SkipLinePatterns.Any(p => desc.ToLower().Contains(p))) continue;
+            if (SkipPatterns.Any(p => desc.ToLower().Contains(p))) continue;
 
-            if (!TryParseAmount(chosenMatch.Groups["amount"].Value, out var amount)) continue;
-
-            // Skip zero-amount lines (totals, balance markers)
-            if (amount == 0m) continue;
+            // ── Step 4: determine sign ────────────────────────────
+            // Priority: parentheses > explicit '-' in the matched amount > CR/DR keywords
+            decimal amount = DetermineSignedAmount(chosenMatch.Value, chosenAbs, desc, remainder);
 
             // Deduplicate
             if (results.Any(r => r.Date == date && r.Description == desc && r.Amount == amount))
@@ -163,28 +178,50 @@ public class MockAiService : IAiService
         return Task.FromResult(results.OrderByDescending(r => r.Date).ToList());
     }
 
-    // ── Split a single long text line on 3+ consecutive spaces (column boundary) ──
-    // PdfPig sometimes outputs: "01/15  AMAZON PURCHASE    -86.42   1,234.56"
-    // We split to: ["01/15  AMAZON PURCHASE", "-86.42   1,234.56"]
-    // but actually we want to keep it as one line for parsing — this helper is
-    // a no-op for now but can split on obvious column gaps if needed.
-    private static IEnumerable<string> SplitOnColumnBoundary(string line)
+    // ── Sign determination ────────────────────────────────────────
+    // Returns the signed decimal amount using these rules (in priority order):
+    //   1. Parentheses   (6.75) → always negative (accounting notation)
+    //   2. Explicit minus in the raw match: "-10.44" or "- 10.44" → negative
+    //   3. "DR"/"debit" anywhere on the line → negative (expense)
+    //   4. "CR"/"credit"/payroll/deposit keywords → positive (income)
+    //   5. Default: negative (most transactions on a bank statement are expenses)
+    private static decimal DetermineSignedAmount(string rawMatch, decimal absValue, string desc, string remainder)
     {
-        // Keep the full line intact; just yield it as-is.
-        // If PdfPig joins multiple rows due to two-column layout, we can add splitting here.
-        yield return line;
+        // Rule 1: accounting parentheses → negative
+        if (rawMatch.TrimStart().StartsWith('('))
+            return -absValue;
+
+        // Rule 2: explicit minus sign in the raw match (with or without space)
+        if (rawMatch.Contains('-'))
+            return -absValue;
+
+        // Rule 3: DR / Debit keywords on the line
+        var lineContext = (desc + " " + remainder).ToLower();
+        if (lineContext.Contains(" dr ") || lineContext.Contains(" dr\t") ||
+            lineContext.Contains("debit"))
+            return -absValue;
+
+        // Rule 4: CR / credit / income keywords → positive
+        var descLower = desc.ToLower();
+        if (lineContext.Contains(" cr ") || lineContext.Contains(" cr\t") ||
+            CreditKeywords.Any(k => descLower.Contains(k)))
+            return absValue;   // positive — income / credit
+
+        // Rule 5: default → negative (expense)
+        // Most bank statement rows ARE expenses; deposits are usually labelled clearly.
+        return -absValue;
     }
 
-    // ── Fallback when nothing parsed ─────────────────────────────
-    private static List<ParsedTransactionDto> Fallback() =>
-    [
-        new ParsedTransactionDto(
-            DateOnly.FromDateTime(DateTime.UtcNow),
-            "⚠️ Could not parse PDF text — connect Azure Foundry for AI extraction",
-            0m,
-            "Other"
-        ),
-    ];
+    // ── Absolute value parser ─────────────────────────────────────
+    private static bool TryParseAmountAbs(string raw, out decimal abs)
+    {
+        abs = 0;
+        if (string.IsNullOrWhiteSpace(raw)) return false;
+        string cleaned = Regex.Replace(raw, @"[^\d.]", "");
+        return decimal.TryParse(cleaned,
+            System.Globalization.NumberStyles.Number,
+            System.Globalization.CultureInfo.InvariantCulture, out abs);
+    }
 
     // ── Date parsing ─────────────────────────────────────────────
     private static bool TryParseDate(string raw, out DateOnly date)
@@ -240,30 +277,13 @@ public class MockAiService : IAiService
         return false;
     }
 
-    // ── Amount parsing ────────────────────────────────────────────
-    private static bool TryParseAmount(string raw, out decimal amount)
-    {
-        amount = 0;
-        if (string.IsNullOrWhiteSpace(raw)) return false;
-
-        raw = raw.Trim();
-        bool isNegative = raw.StartsWith('(') && raw.EndsWith(')') || raw.Contains('-');
-
-        string cleaned = Regex.Replace(raw, @"[^\d.]", "");
-        if (!decimal.TryParse(cleaned,
-            System.Globalization.NumberStyles.Number,
-            System.Globalization.CultureInfo.InvariantCulture, out decimal val))
-            return false;
-
-        amount = isNegative ? -val : val;
-        return true;
-    }
-
     // ── Description cleanup ───────────────────────────────────────
     private static string CleanDescription(string raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
         raw = raw.Replace("\r", " ").Replace("\n", " ").Replace("\t", " ");
+        // Remove embedded "posting date" patterns (e.g. "08/05" inside "Card Purchase 08/05 Chipotle")
+        raw = Regex.Replace(raw, @"\b\d{1,2}/\d{1,2}\b", "").Trim();
         raw = Regex.Replace(raw.Trim(), @"\s{2,}", " ");
         raw = raw.Trim('-', ':', '|', ' ', '#');
         return raw.Length > 80 ? raw[..80] : raw;
@@ -281,6 +301,17 @@ public class MockAiService : IAiService
 
         return "Other";
     }
+
+    // ── Fallback ──────────────────────────────────────────────────
+    private static List<ParsedTransactionDto> Fallback() =>
+    [
+        new ParsedTransactionDto(
+            DateOnly.FromDateTime(DateTime.UtcNow),
+            "⚠️ Could not parse PDF text — connect Azure Foundry for AI extraction",
+            0m,
+            "Other"
+        ),
+    ];
 
     // ── AI stubs ──────────────────────────────────────────────────
     public Task<string> AskAsync(string question, string transactionContext)

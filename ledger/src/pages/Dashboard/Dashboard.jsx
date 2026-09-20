@@ -78,22 +78,22 @@ export default function Dashboard() {
   }, [])
 
   // ── Date range label for the period being shown ─────────────
-  const targetTxns = data?.recentTransactions  // we'll compute range from spendByCategory context
-  // Use the dashboard's stat window: earliest + latest transaction date in current period
+  // parseLocalDate pins bare date strings to local noon to avoid UTC-midnight shift
+  const parseLocalDate = (s) => s?.length === 10 ? new Date(s + 'T12:00:00') : new Date(s)
+
   const fmtShort = (dateStr) => {
     if (!dateStr) return ''
-    const d = new Date(dateStr + 'T00:00:00')
-    return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
+    return parseLocalDate(dateStr).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })
   }
   const fmtYear = (dateStr) => {
     if (!dateStr) return ''
-    return new Date(dateStr + 'T00:00:00').getFullYear()
+    return parseLocalDate(dateStr).getFullYear()
   }
 
   const activeMonthLabel = data?.periodStart && data?.periodEnd
     ? `${fmtShort(data.periodStart)} – ${fmtShort(data.periodEnd)}, ${fmtYear(data.periodEnd)}`
     : data?.recentTransactions?.length > 0
-      ? new Date(data.recentTransactions[0].date + 'T00:00:00').toLocaleString('en-US', { month: 'long', year: 'numeric' })
+      ? parseLocalDate(data.recentTransactions[0].date).toLocaleString('en-US', { month: 'long', year: 'numeric' })
       : new Date().toLocaleString('en-US', { month: 'long', year: 'numeric' })
 
   // ── Derived values ─────────────────────────────────────────

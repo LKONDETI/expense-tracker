@@ -15,10 +15,19 @@ const CATEGORIES = [
   'Subscriptions', 'Shopping', 'Insurance', 'Other',
 ]
 
+// Parse a date string safely — avoids the UTC-midnight timezone shift bug.
+// "2026-08-06" parsed as UTC shows Aug 5 in US timezones; appending T12:00:00 keeps it local noon.
+const parseDate = (d) => {
+  if (!d) return null
+  const s = typeof d === 'string' ? d : String(d)
+  // If it's already a full ISO string, use as-is; if it's a bare date, pin to local noon
+  return s.length === 10 ? new Date(s + 'T12:00:00') : new Date(s)
+}
+
 const fmtDate = (d) => {
   if (!d) return null
-  const date = typeof d === 'string' ? new Date(d) : d
-  return date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+  const date = parseDate(d)
+  return date ? date.toLocaleDateString('en-US', { month: 'short', year: 'numeric' }) : null
 }
 
 const fmtUploadedAt = (iso) => {
