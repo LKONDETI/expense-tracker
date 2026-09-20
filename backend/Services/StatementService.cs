@@ -3,7 +3,6 @@ using Ledger.API.DTOs;
 using Ledger.API.Models;
 using Microsoft.EntityFrameworkCore;
 using UglyToad.PdfPig;
-using UglyToad.PdfPig.DocumentLayoutAnalysis.TextExtractor;
 
 namespace Ledger.API.Services;
 
@@ -26,7 +25,11 @@ public class StatementService(AppDbContext db, IAiService ai) : IStatementServic
         db.Statements.Add(statement);
         await db.SaveChangesAsync();
 
-        // 2. Extract raw text from PDF using PdfPig
+        // 2. Extract raw text from PDF using PdfPig word coordinates
+        //    ContentOrderTextExtractor often groups multi-column PDFs by block/column
+        //    (all dates first, then all descriptions, then all amounts) rather than by row.
+        //    Instead we use word bounding boxes: group words whose Y centres are within
+        //    4 points of each other into the same "row", then sort left→right within each row.
         string rawText;
         using (var ms = new MemoryStream())
         {
@@ -35,18 +38,43 @@ public class StatementService(AppDbContext db, IAiService ai) : IStatementServic
 
             using var pdf = PdfDocument.Open(ms);
             var pageTexts = new List<string>();
+
             foreach (var page in pdf.GetPages())
             {
-                // ContentOrderTextExtractor orders words visually by lines and columns with spaces
-                var text = ContentOrderTextExtractor.GetText(page);
-                if (string.IsNullOrWhiteSpace(text) || text.Trim().Length < 10)
+                var words = page.GetWords().ToList();
+                if (words.Count == 0)
                 {
-                    // Fallback to joining words with spaces
-                    var words = page.GetWords();
-                    text = string.Join(" ", words.Select(w => w.Text));
+                    pageTexts.Add(string.Empty);
+                    continue;
                 }
-                pageTexts.Add(text);
+
+                // Build rows: bucket words by rounded Y-centre (4-point tolerance)
+                var rowBuckets = new SortedDictionary<int, List<(double X, string Text)>>(
+                    Comparer<int>.Create((a, b) => b.CompareTo(a))); // descending = top first
+
+                foreach (var word in words)
+                {
+                    var yCentre = (word.BoundingBox.Top + word.BoundingBox.Bottom) / 2.0;
+                    var bucket  = (int)Math.Round(yCentre / 4.0) * 4; // snap to 4pt grid
+                    if (!rowBuckets.TryGetValue(bucket, out var list))
+                    {
+                        list = [];
+                        rowBuckets[bucket] = list;
+                    }
+                    list.Add((word.BoundingBox.Left, word.Text));
+                }
+
+                var lines = new List<string>();
+                foreach (var (_, row) in rowBuckets)
+                {
+                    var line = string.Join(" ", row.OrderBy(w => w.X).Select(w => w.Text));
+                    if (!string.IsNullOrWhiteSpace(line))
+                        lines.Add(line);
+                }
+
+                pageTexts.Add(string.Join("\n", lines));
             }
+
             rawText = string.Join("\n", pageTexts);
         }
 
@@ -59,10 +87,18 @@ public class StatementService(AppDbContext db, IAiService ai) : IStatementServic
             .ToListAsync();
 
         // 4. Call AI / Mock Service to extract + categorize transactions
-        Console.WriteLine($"[PDF EXTRACT DEBUG] rawText length={rawText.Length}, preview={rawText.Substring(0, Math.Min(rawText.Length, 300))}");
+        // ── DEBUG: log extracted text + parsed results ────────────
+        Console.WriteLine($"[PDF DEBUG] rawText length={rawText.Length}");
+        Console.WriteLine($"[PDF DEBUG] First 3000 chars:\n{rawText.Substring(0, Math.Min(rawText.Length, 3000))}");
+        Console.WriteLine("[PDF DEBUG] ─────────────────────────────────────────");
+
         var parsed = await ai.ExtractTransactionsAsync(rawText, userMappings
             .ToDictionary(m => m.MerchantPattern, m => m.Category));
-        Console.WriteLine($"[PDF EXTRACT DEBUG] parsedCount={parsed.Count}");
+
+        Console.WriteLine($"[PDF DEBUG] parsedCount={parsed.Count}");
+        foreach (var t in parsed.Take(10))
+            Console.WriteLine($"[PDF DEBUG]   {t.Date} | {t.Amount,12:F2} | {t.Category,-15} | {t.Description}");
+
 
         // 5. Detect date range from parsed transactions
         if (parsed.Count > 0)
