@@ -5,11 +5,19 @@ namespace Ledger.API.Services;
 
 /// <summary>
 /// Development AI service used when AzureFoundry credentials are not configured.
-/// Parses bank statement text using a robust multi-pass approach:
-///   1. Splits text on real newlines AND on whitespace gaps that indicate column boundaries
-///   2. Finds date-anchored lines (date at start of segment)
-///   3. Per segment: picks the smallest amount (transaction amt) vs largest (running balance)
-///   4. Detects sign from CR/DR keywords and parentheses, not just a leading minus
+///
+/// Bank statement column layout (all major US banks):
+///   DATE | DESCRIPTION | AMOUNT | BALANCE
+///
+/// Sign encoding (standard US banks):
+///   Debits  → explicit minus:  -2,030.00  or  (2,030.00)
+///   Credits → no minus:         1,020.00   (the bank already encodes the sign)
+///
+/// Amount selection:
+///   AMOUNT column is always LEFT of BALANCE column → always appears FIRST in text stream.
+///   We take the FIRST number on the line as the transaction amount.
+///   Guard: if the first number is suspiciously large (>10× the second), swap — balance
+///   was emitted first by PdfPig (rare but possible on some PDFs).
 /// </summary>
 public class MockAiService : IAiService
 {
@@ -18,10 +26,9 @@ public class MockAiService : IAiService
         @"^\s*(?<date>\d{4}[/\-]\d{1,2}[/\-]\d{1,2}|\d{1,2}[/\-]\d{1,2}(?:[/\-]\d{2,4})?|(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec)[a-z]*\.?\s+\d{1,2}(?:,?\s+\d{2,4})?)\s+",
         RegexOptions.IgnoreCase | RegexOptions.Compiled);
 
-    // Amounts: (6.75)  -$42.10  $2,450.00  -10.44  - 10.44  10.44
-    // Crucially: capture the leading minus EVEN when there is a space between - and digits
+    // Amounts: captures the leading minus (with or without space) as part of the match
     private static readonly Regex AmountRegex = new Regex(
-        @"(?<amount>\(\s*\$?\s*[\d,]+\.\d{2}\s*\)|(?<neg>-)\s*\$?\s*[\d,]+\.\d{2}|\$\s*[\d,]+\.\d{2}|(?<!\d)[\d,]+\.\d{2}(?!\d))",
+        @"(?<amount>\(\s*\$?\s*[\d,]+\.\d{2}\s*\)|-\s*\$?\s*[\d,]+\.\d{2}|\$\s*[\d,]+\.\d{2}|(?<![.\d])[\d,]+\.\d{2}(?![.\d]))",
         RegexOptions.Compiled);
 
     // Lines that are definitely NOT transactions
@@ -83,43 +90,30 @@ public class MockAiService : IAiService
           "liberty mutual", "travelers", "hartford"], "Insurance"),
     ];
 
-    // Income / credit keywords — if description contains these AND no explicit debit signal, treat as positive
-    private static readonly string[] CreditKeywords =
-    [
-        "payroll", "direct deposit", "ppd", "ach deposit", "deposit", "refund",
-        "credit", "transfer in", "payment received", "reversal", "zelle in",
-        "cashback", "reimburs", "interest paid",
-    ];
-
-    // Debit / expense keywords
-    private static readonly string[] DebitKeywords =
-    [
-        "card purchase", "purchase", "pos debit", "ach debit", "withdrawal",
-        "payment to", "autopay", "bill pay", "check", "fee", "atm",
-        "transfer out", "zelle out", "wire",
-    ];
-
     public Task<List<ParsedTransactionDto>> ExtractTransactionsAsync(
         string pdfText, Dictionary<string, string> knownMerchants)
     {
         if (string.IsNullOrWhiteSpace(pdfText))
             return Task.FromResult(Fallback());
 
-        // ── Step 1: split into segments ───────────────────────────
-        // PdfPig sometimes emits several transactions on one text line separated
-        // by large whitespace gaps. We split on BOTH real newlines and on gaps of
-        // 4+ spaces so each physical bank-statement row becomes its own segment.
-        var rawSegments = pdfText
+        // ── Split text into one-transaction-per-segment ────────────
+        // Splits on newlines AND on 4+ whitespace gaps that precede a date pattern,
+        // because PdfPig sometimes concatenates two statement rows on one text line.
+        var segments = pdfText
             .Split(['\n', '\r'], StringSplitOptions.RemoveEmptyEntries)
-            .SelectMany(line => Regex.Split(line, @"(?<=\d)\s{4,}(?=\d{1,2}[/\-])"))
+            .SelectMany(line => Regex.Split(line.TrimEnd(), @"(?<=[\d\s])\s{4,}(?=\d{1,2}[/\-])"))
+            .Where(s => s.Trim().Length >= 5)
             .ToList();
 
         var results = new List<ParsedTransactionDto>();
 
-        foreach (var rawSeg in rawSegments)
+        foreach (var rawSeg in segments)
         {
             var seg = rawSeg.Trim();
-            if (seg.Length < 5) continue;
+
+            // Skip known header / footer / summary lines
+            var lower = seg.ToLower();
+            if (SkipPatterns.Any(p => lower.Contains(p))) continue;
 
             // Must start with a date
             var dateMatch = LineDateRegex.Match(seg);
@@ -129,40 +123,36 @@ public class MockAiService : IAiService
             // Everything after the date
             string remainder = seg.Substring(dateMatch.Index + dateMatch.Length).Trim();
 
-            // Skip known header/footer lines
-            var lower = seg.ToLower();
-            if (SkipPatterns.Any(p => lower.Contains(p))) continue;
-
             // Find all amounts in the remainder
             var amtMatches = AmountRegex.Matches(remainder).Cast<Match>().ToList();
             if (amtMatches.Count == 0) continue;
 
-            // ── Step 2: pick the transaction amount ───────────────
-            // Running balance = largest absolute value on the line.
-            // Transaction amount = smallest absolute value.
-            // We keep track of both the value AND the full match for sign extraction.
-            Match? chosenMatch = null;
-            decimal chosenAbs  = decimal.MaxValue;
+            // ── Select the transaction amount ─────────────────────
+            // Column order: AMOUNT is always LEFT of BALANCE → FIRST in text stream.
+            // Guard: if first number is >10× the second, PdfPig emitted balance first → use second.
+            Match txnMatch = amtMatches[0];
 
-            foreach (var m in amtMatches)
+            if (amtMatches.Count >= 2 &&
+                TryParseAmountAbs(amtMatches[0].Value, out var abs0) &&
+                TryParseAmountAbs(amtMatches[1].Value, out var abs1) &&
+                abs1 > 0 && abs0 / abs1 > 10m)
             {
-                if (TryParseAmountAbs(m.Value, out var abs) && abs < chosenAbs)
-                {
-                    chosenAbs   = abs;
-                    chosenMatch = m;
-                }
+                // Balance was emitted first (unusual) → use second match
+                txnMatch = amtMatches[1];
             }
-            if (chosenMatch is null || chosenAbs == 0m) continue;
 
-            // ── Step 3: determine description (before first amount) ──
+            // ── Determine description ─────────────────────────────
+            // Everything between the date and the FIRST amount = description
             string descRaw = remainder.Substring(0, amtMatches[0].Index);
             string desc    = CleanDescription(descRaw);
             if (desc.Length < 2) continue;
             if (SkipPatterns.Any(p => desc.ToLower().Contains(p))) continue;
 
-            // ── Step 4: determine sign ────────────────────────────
-            // Priority: parentheses > explicit '-' in the matched amount > CR/DR keywords
-            decimal amount = DetermineSignedAmount(chosenMatch.Value, chosenAbs, desc, remainder);
+            // ── Determine sign ────────────────────────────────────
+            // US banks explicitly mark debits with '-' or '()'.
+            // A plain positive number (no minus, no parens) = credit/income.
+            decimal amount = ApplySign(txnMatch.Value, desc);
+            if (amount == 0m) continue;
 
             // Deduplicate
             if (results.Any(r => r.Date == date && r.Description == desc && r.Amount == amount))
@@ -178,41 +168,29 @@ public class MockAiService : IAiService
         return Task.FromResult(results.OrderByDescending(r => r.Date).ToList());
     }
 
-    // ── Sign determination ────────────────────────────────────────
-    // Returns the signed decimal amount using these rules (in priority order):
-    //   1. Parentheses   (6.75) → always negative (accounting notation)
-    //   2. Explicit minus in the raw match: "-10.44" or "- 10.44" → negative
-    //   3. "DR"/"debit" anywhere on the line → negative (expense)
-    //   4. "CR"/"credit"/payroll/deposit keywords → positive (income)
-    //   5. Default: negative (most transactions on a bank statement are expenses)
-    private static decimal DetermineSignedAmount(string rawMatch, decimal absValue, string desc, string remainder)
+    // ── Sign logic ────────────────────────────────────────────────
+    // Priority:
+    //   1. Parentheses (10.00) → always negative (accounting notation)
+    //   2. Leading minus '-10.00' or '- 10.00' → negative
+    //   3. No minus, no parens → POSITIVE (bank already encoded: no minus = credit)
+    private static decimal ApplySign(string rawMatch, string desc)
     {
-        // Rule 1: accounting parentheses → negative
-        if (rawMatch.TrimStart().StartsWith('('))
-            return -absValue;
+        if (!TryParseAmountAbs(rawMatch, out var abs) || abs == 0m) return 0m;
 
-        // Rule 2: explicit minus sign in the raw match (with or without space)
-        if (rawMatch.Contains('-'))
-            return -absValue;
+        // Rule 1: accounting parentheses
+        var trimmed = rawMatch.Trim();
+        if (trimmed.StartsWith('(') && trimmed.EndsWith(')'))
+            return -abs;
 
-        // Rule 3: DR / Debit keywords on the line
-        var lineContext = (desc + " " + remainder).ToLower();
-        if (lineContext.Contains(" dr ") || lineContext.Contains(" dr\t") ||
-            lineContext.Contains("debit"))
-            return -absValue;
+        // Rule 2: explicit minus (with or without space)
+        if (trimmed.StartsWith('-') || trimmed.Contains("- "))
+            return -abs;
 
-        // Rule 4: CR / credit / income keywords → positive
-        var descLower = desc.ToLower();
-        if (lineContext.Contains(" cr ") || lineContext.Contains(" cr\t") ||
-            CreditKeywords.Any(k => descLower.Contains(k)))
-            return absValue;   // positive — income / credit
-
-        // Rule 5: default → negative (expense)
-        // Most bank statement rows ARE expenses; deposits are usually labelled clearly.
-        return -absValue;
+        // Rule 3: no explicit sign → positive (credit / income)
+        return abs;
     }
 
-    // ── Absolute value parser ─────────────────────────────────────
+    // ── Helpers ───────────────────────────────────────────────────
     private static bool TryParseAmountAbs(string raw, out decimal abs)
     {
         abs = 0;
@@ -223,7 +201,6 @@ public class MockAiService : IAiService
             System.Globalization.CultureInfo.InvariantCulture, out abs);
     }
 
-    // ── Date parsing ─────────────────────────────────────────────
     private static bool TryParseDate(string raw, out DateOnly date)
     {
         date = default;
@@ -248,13 +225,7 @@ public class MockAiService : IAiService
                 System.Globalization.CultureInfo.InvariantCulture,
                 System.Globalization.DateTimeStyles.None, out date))
             {
-                if (date.Year == 1)
-                {
-                    var today = DateOnly.FromDateTime(DateTime.UtcNow);
-                    date = new DateOnly(today.Year, date.Month, date.Day);
-                    if (date > today.AddDays(30))
-                        date = new DateOnly(today.Year - 1, date.Month, date.Day);
-                }
+                if (date.Year == 1) date = InferYear(date);
                 return true;
             }
         }
@@ -264,32 +235,35 @@ public class MockAiService : IAiService
             System.Globalization.DateTimeStyles.None, out var dt))
         {
             date = DateOnly.FromDateTime(dt);
-            if (date.Year == 1)
-            {
-                var today = DateOnly.FromDateTime(DateTime.UtcNow);
-                date = new DateOnly(today.Year, date.Month, date.Day);
-                if (date > today.AddDays(30))
-                    date = new DateOnly(today.Year - 1, date.Month, date.Day);
-            }
+            if (date.Year == 1) date = InferYear(date);
             return true;
         }
 
         return false;
     }
 
-    // ── Description cleanup ───────────────────────────────────────
+    private static DateOnly InferYear(DateOnly shortDate)
+    {
+        var today = DateOnly.FromDateTime(DateTime.UtcNow);
+        var candidate = new DateOnly(today.Year, shortDate.Month, shortDate.Day);
+        // If the resulting date is >30 days in the future it likely belongs to the prior year
+        return candidate > today.AddDays(30)
+            ? new DateOnly(today.Year - 1, shortDate.Month, shortDate.Day)
+            : candidate;
+    }
+
     private static string CleanDescription(string raw)
     {
         if (string.IsNullOrWhiteSpace(raw)) return string.Empty;
         raw = raw.Replace("\r", " ").Replace("\n", " ").Replace("\t", " ");
-        // Remove embedded "posting date" patterns (e.g. "08/05" inside "Card Purchase 08/05 Chipotle")
-        raw = Regex.Replace(raw, @"\b\d{1,2}/\d{1,2}\b", "").Trim();
+        // Strip embedded MM/DD "purchase date" tokens that banks embed in descriptions
+        raw = Regex.Replace(raw, @"\b\d{1,2}/\d{2}\b", "").Trim();
+        // Collapse multiple spaces
         raw = Regex.Replace(raw.Trim(), @"\s{2,}", " ");
         raw = raw.Trim('-', ':', '|', ' ', '#');
         return raw.Length > 80 ? raw[..80] : raw;
     }
 
-    // ── Category resolution ───────────────────────────────────────
     private static string ResolveCategory(string desc, Dictionary<string, string> knownMerchants)
     {
         var lower = desc.ToLower();
@@ -302,7 +276,6 @@ public class MockAiService : IAiService
         return "Other";
     }
 
-    // ── Fallback ──────────────────────────────────────────────────
     private static List<ParsedTransactionDto> Fallback() =>
     [
         new ParsedTransactionDto(
@@ -313,7 +286,7 @@ public class MockAiService : IAiService
         ),
     ];
 
-    // ── AI stubs ──────────────────────────────────────────────────
+    // ── AI stubs (MockAiService does not call any real AI) ────────
     public Task<string> AskAsync(string question, string transactionContext)
     {
         var q = question.ToLower();
