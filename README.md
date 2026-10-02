@@ -1,12 +1,12 @@
 # Ledger — Personal Expense Tracker
 
-> A full-stack personal finance app with AI-powered categorization, natural language chat, and smart subscription detection.
+> A full-stack personal finance app with AI-powered categorization, natural language chat, interactive analytics, and smart subscription detection.
 
 ---
 
 ## Overview
 
-**Ledger** lets you upload bank/credit card PDF statements, automatically categorize transactions using AI, review and correct them, then explore your spending through an interactive dashboard, insights engine, and a natural-language "Ask" interface powered by Claude 3.5 Sonnet.
+**Ledger** lets you upload bank/credit card PDF statements, automatically parse and categorize transactions using AI, review and correct them, and explore your spending through interactive dashboards, visual analytics charts, insights engine, and a natural-language "Ask" interface powered by Claude 3.5 Sonnet via Azure AI Foundry.
 
 ---
 
@@ -15,17 +15,18 @@
 | Area | What's Built |
 |---|---|
 | **Auth** | JWT register / login with BCrypt password hashing |
-| **PDF Upload** | Drag-and-drop upload → PdfPig text extraction → AI categorization |
-| **Statement Review** | User corrects categories before saving; merchant-category memory persists corrections |
-| **Transactions** | List view with search, category filter, inline edit, and delete |
-| **Subscriptions** | Auto-detected from recurring charges across multiple months |
-| **Dashboard** | Stat cards (total spent, subscriptions, budget left), spend-by-category bars, recent transactions |
+| **PDF Upload** | Drag-and-drop upload → coordinate-based PDF text extraction → AI categorization; statement history panel & privacy trust wall |
+| **Statement Review** | User reviews and corrects categories before saving; merchant-category memory persists corrections for future uploads |
+| **Transactions** | Data table with search, category filter, inline category editing, deletion, and running **Balance** column |
+| **Analytics** | Interactive **Recharts Bar Chart** (monthly income vs. outgo) & **Pie/Donut Chart** (category breakdown with month selector) |
+| **Subscriptions** | Auto-detected recurring payments across multiple billing cycles |
+| **Dashboard** | Period date range display, stat cards (total spent, subscriptions, budget left), spend-by-category progress bars, recent transactions |
 | **Insights** | AI-generated spending insights: projected month-end spend, dining vs. average, unused subs, bullet-point advice |
 | **Ask (AI Chat)** | Natural language questions answered using your own transaction data via Claude |
-| **Settings** | Monthly budget + per-category budgets, persisted to DB |
-| **Privacy & Security** | PII stripping explanation, delete-all-data with confirmation modal |
-| **UX Polish** | Loading skeletons, empty states, and error banners with retry on every screen |
-| **AI Auto-switch** | Falls back to `MockAiService` when Azure Foundry credentials are not configured; uses real Claude when they are |
+| **Settings** | Monthly overall budget + per-category budgets, persisted to DB |
+| **Privacy & Security** | PII privacy explanation, one-click reset/delete-all-data with confirmation modal |
+| **UX Polish** | Loading skeletons, empty states, error banners with retry on every screen, local-noon date formatting (no timezone shifts) |
+| **AI Auto-switch** | Local `MockAiService` fallback when Azure Foundry credentials are not configured; uses real Claude 3.5 Sonnet when configured |
 
 ---
 
@@ -36,17 +37,17 @@
 |---|---|---|
 | React | 19 | UI framework |
 | React Router | 7 | Client-side routing |
-| Vite | 8 | Build tool & dev server |
-| Recharts | latest | Dashboard charts |
-| Lucide React | latest | Icon library |
+| Vite | 8 | Dev server & build tool |
+| Recharts | latest | Interactive bar & donut charts |
+| Lucide React | latest | UI icon library |
 
 ### Backend
 | Technology | Version | Purpose |
 |---|---|---|
 | .NET | 9 | Web API framework |
-| Entity Framework Core | latest | ORM & migrations |
-| Npgsql | latest | PostgreSQL driver |
-| PdfPig | latest | PDF text extraction |
+| Entity Framework Core | 9 | ORM & database migrations |
+| Npgsql | 9 | PostgreSQL driver |
+| PdfPig | latest | PDF bounding-box text extraction |
 | BCrypt.Net | latest | Password hashing |
 
 ### Infrastructure & AI
@@ -62,43 +63,47 @@
 ## Architecture
 
 ```
-┌─────────────────────────────────────────────────────┐
-│                     Browser                         │
-│   React 19 + React Router 7 + Recharts + Lucide     │
-│   Vite dev server (local) / GitHub Pages (prod)     │
-└───────────────────────┬─────────────────────────────┘
-                        │ REST / JSON (JWT Bearer)
-                        ▼
-┌─────────────────────────────────────────────────────┐
-│              .NET 9 Web API (ASP.NET Core)           │
-│                                                     │
-│  ┌─────────────┐  ┌──────────────┐  ┌───────────┐  │
-│  │  Auth       │  │  Statements  │  │  Insights │  │
-│  │  /register  │  │  /upload     │  │  /ask     │  │
-│  │  /login     │  │  /review     │  │  /chat    │  │
-│  └─────────────┘  └──────────────┘  └───────────┘  │
-│                                                     │
-│  ┌──────────────────────────────────────────────┐   │
-│  │              IAiService                      │   │
-│  │  MockAiService  │  AzureFoundryService       │   │
-│  │  (no creds)     │  (Claude 3.5 Sonnet)       │   │
-│  └──────────────────────────────────────────────┘   │
-│                                                     │
-│  Entity Framework Core + Npgsql                     │
-└───────────────────────┬─────────────────────────────┘
-                        │ TLS / Npgsql
-                        ▼
-┌─────────────────────────────────────────────────────┐
-│              Neon — Serverless Postgres              │
-│  Tables: users, transactions, statements,            │
-│          merchant_category_map, budgets              │
-└─────────────────────────────────────────────────────┘
-                        │
-                        ▼
-┌─────────────────────────────────────────────────────┐
-│         Azure AI Foundry (when configured)          │
-│         Claude 3.5 Sonnet endpoint                  │
-└─────────────────────────────────────────────────────┘
+┌─────────────────────────────────────────────────────────┐
+│                         Browser                         │
+│   React 19 + React Router 7 + Recharts + Lucide Icons   │
+│   Vite dev server (local) / GitHub Pages (prod)         │
+└───────────────────────────┬─────────────────────────────┘
+                            │ REST / JSON (JWT Bearer)
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│              .NET 9 Web API (ASP.NET Core)               │
+│                                                         │
+│  ┌─────────────┐  ┌──────────────┐  ┌───────────────┐   │
+│  │  Auth       │  │  Statements  │  │  Analytics    │   │
+│  │  /register  │  │  /upload     │  │  /analytics   │   │
+│  │  /login     │  │  /history    │  └───────────────┘   │
+│  └─────────────┘  └──────────────┘                      │
+│  ┌─────────────┐  ┌──────────────┐  ┌───────────────┐   │
+│  │Transactions │  │  Dashboard   │  │  Insights     │   │
+│  │  /list      │  │  /stats      │  │  /ask         │   │
+│  └─────────────┘  └──────────────┘  └───────────────┘   │
+│                                                         │
+│  ┌──────────────────────────────────────────────────┐   │
+│  │                  IAiService                      │   │
+│  │  MockAiService        │  AzureFoundryService     │   │
+│  │  (local regex/line)   │  (Claude 3.5 Sonnet)     │   │
+│  └──────────────────────────────────────────────────┘   │
+│                                                         │
+│  Entity Framework Core + Npgsql                         │
+└───────────────────────────┬─────────────────────────────┘
+                            │ TLS / Npgsql
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│              Neon — Serverless Postgres                  │
+│  Tables: Users, Transactions, Statements,               │
+│          MerchantCategoryMaps, CategoryBudgets          │
+└─────────────────────────────────────────────────────────┘
+                            │
+                            ▼
+┌─────────────────────────────────────────────────────────┐
+│         Azure AI Foundry (when configured)              │
+│         Claude 3.5 Sonnet deployment                    │
+└─────────────────────────────────────────────────────────┘
 ```
 
 ---
@@ -109,7 +114,7 @@
 
 - [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
 - [Node.js 20+](https://nodejs.org/) and npm
-- A [Neon](https://neon.tech/) project (free tier works)
+- A [Neon](https://neon.tech/) PostgreSQL project (free tier works)
 - _(Optional)_ Azure AI Foundry access with a Claude 3.5 Sonnet deployment
 
 ---
@@ -117,7 +122,7 @@
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/<your-username>/expense-tracker.git
+git clone https://github.com/LKONDETI/expense-tracker.git
 cd expense-tracker
 ```
 
@@ -126,99 +131,75 @@ cd expense-tracker
 ### 2. Backend Setup
 
 ```bash
-cd backend   # or wherever your .csproj lives
+cd backend
 ```
 
-Copy and configure the app settings:
+Create app settings configuration:
 
 ```bash
 cp appsettings.json appsettings.Development.json
 ```
 
-Edit `appsettings.Development.json` and fill in the required values (see [Environment Variables](#environment-variables) below).
+Edit `appsettings.Development.json` and set your Neon connection string and JWT key:
 
-Apply EF Core migrations and start the API:
+```json
+{
+  "ConnectionStrings": {
+    "NeonDb": "Host=your-neon-host;Database=neondb;Username=your-user;Password=your-password;SSL Mode=Require"
+  },
+  "Jwt": {
+    "Key": "your-super-secret-jwt-key-min-32-chars",
+    "Issuer": "LedgerAPI",
+    "Audience": "LedgerApp"
+  }
+}
+```
+
+Apply database migrations:
 
 ```bash
 dotnet ef database update
+```
+
+Run the backend API:
+
+```bash
 dotnet run
 ```
 
-The API will start on `https://localhost:5001` (or the port shown in the console).
+The Web API runs on `http://localhost:5000` (or `https://localhost:5001`).
 
 ---
 
 ### 3. Frontend Setup
 
 ```bash
-cd frontend   # or the React project root
+cd ../ledger
 npm install
 npm run dev
 ```
 
-The dev server will start on `http://localhost:5173` by default. Set the API base URL in your `.env.local`:
+The dev server starts on `http://localhost:5173`. Create a `.env.local` if needed:
 
 ```env
-VITE_API_BASE_URL=https://localhost:5001
+VITE_API_URL=http://localhost:5000
 ```
 
 ---
 
-### 4. Configuring Azure AI Foundry (Optional)
+### 4. Azure AI Foundry Setup (Optional)
 
-Without Azure credentials the app automatically falls back to `MockAiService`, which returns deterministic fake categories — perfect for local development and testing.
+Without Azure credentials, the app automatically falls back to `MockAiService` for offline development and testing.
 
-To enable real Claude 3.5 Sonnet responses, populate the following keys in `appsettings.Development.json` (see table below). The `AzureFoundryService` will be selected automatically at startup when all three keys are present and non-empty.
+To enable real Claude 3.5 Sonnet AI responses, set these keys in `appsettings.Development.json`:
 
----
-
-## Environment Variables
-
-### Backend (`appsettings.json` / App Service config)
-
-| Key | Description | Required |
-|---|---|---|
-| `ConnectionStrings__DefaultConnection` | Neon PostgreSQL connection string | ✅ Yes |
-| `Jwt__Key` | Secret key for JWT signing (min 32 chars) | ✅ Yes |
-| `Jwt__Issuer` | JWT issuer string | ✅ Yes |
-| `Jwt__Audience` | JWT audience string | ✅ Yes |
-| `AzureFoundry__Endpoint` | Azure AI Foundry endpoint URL | ⬜ Optional |
-| `AzureFoundry__ApiKey` | Azure AI Foundry API key | ⬜ Optional |
-| `AzureFoundry__DeploymentName` | Claude deployment name (e.g. `claude-3-5-sonnet`) | ⬜ Optional |
-
-> **⚠️ Before deploying to production**, move all secrets out of `appsettings.json` and into Azure App Service environment variables or Azure Key Vault.
-
-### Frontend (`.env.local`)
-
-| Key | Description |
-|---|---|
-| `VITE_API_BASE_URL` | Base URL of the running .NET API |
-
----
-
-## Roadmap
-
-### ✅ Done
-- [x] .NET 9 Web API with JWT auth
-- [x] Neon Postgres + EF Core migrations
-- [x] PDF upload → PdfPig extraction → AI categorization
-- [x] Statement review screen with merchant-category memory
-- [x] Transactions list (search, filter, inline edit, delete)
-- [x] Subscription auto-detection
-- [x] Dashboard (stat cards, spend-by-category, recent transactions)
-- [x] AI Insights (projected spend, anomaly detection, unused subs)
-- [x] Ask screen (natural language chat over user's data)
-- [x] Settings (monthly + per-category budgets)
-- [x] Privacy & Security screen (PII explanation, delete-all-data)
-- [x] MockAiService / AzureFoundryService auto-switching
-- [x] Loading skeletons, empty states, error banners on all screens
-
-### 🔜 Next Up
-- [ ] Fill in Azure Foundry credentials (`appsettings.json` placeholders)
-- [ ] Analytics / Charts page — Recharts bar chart (monthly income vs. expenses) + pie chart (category breakdown)
-- [ ] Frontend deployment → GitHub Pages
-- [ ] Backend deployment → Azure App Service
-- [ ] Move secrets to Azure App Service env vars / Key Vault
+```json
+"AzureFoundry": {
+  "Endpoint": "https://your-resource.services.ai.azure.com",
+  "ApiKey": "your-azure-api-key",
+  "DeploymentName": "claude-3-5-sonnet"
+}
+```
 
 ---
 
@@ -227,19 +208,47 @@ To enable real Claude 3.5 Sonnet responses, populate the following keys in `apps
 ```
 expense-tracker/
 ├── backend/                  # .NET 9 Web API
-│   ├── Controllers/          # API endpoints
-│   ├── Models/               # EF Core entities
-│   ├── Services/             # IAiService, MockAiService, AzureFoundryService
+│   ├── Controllers/          # Auth, Statements, Transactions, Analytics, Dashboard, Insights, Settings
+│   ├── DTOs/                 # Request & Response DTOs (TransactionDto, AnalyticsResponse, etc.)
+│   ├── Models/               # User, Statement, Transaction, MerchantCategoryMap, CategoryBudget
+│   ├── Services/             # StatementService, MockAiService, AzureFoundryService, TransactionService
 │   ├── Migrations/           # EF Core database migrations
-│   └── appsettings.json      # Config (placeholders — do not commit secrets)
+│   └── appsettings.json      # Config template
 │
-└── frontend/                 # React 19 + Vite
+└── ledger/                   # React 19 + Vite Frontend
     ├── src/
-    │   ├── pages/            # Dashboard, Transactions, Subscriptions, Insights, Ask, Settings, Upload
-    │   ├── components/       # Shared UI components
-    │   └── main.tsx          # App entry point
-    └── vite.config.ts
+    │   ├── pages/            # Dashboard, Transactions, Analytics, Subscriptions, Insights, Ask, Settings, Upload
+    │   ├── components/       # Sidebar, Navbar, Trust Wall, Confirm Modal
+    │   ├── utils/            # api.js fetch wrapper & auth context
+    │   └── App.jsx           # App routes
+    └── index.html
 ```
+
+---
+
+## Roadmap
+
+### ✅ Done
+- [x] .NET 9 Web API with JWT authentication & BCrypt password hashing
+- [x] Neon Postgres + EF Core migrations (including running `Balance` column support)
+- [x] PDF statement parsing (coordinate-based Y-bucket row extractor) → AI categorization
+- [x] Statement upload review & history panel
+- [x] Transactions list (search, category filter, inline category edit, delete, running balance column)
+- [x] Analytics page — Recharts monthly income vs. outgo bar chart & category donut chart
+- [x] Subscription auto-detection across multi-month statements
+- [x] Dashboard (exact period date range, stat cards, category progress bars, recent transactions)
+- [x] AI Insights (projected spend, dining comparison, unused subscriptions, advice bullets)
+- [x] Ask screen (natural language chat with thinking animation)
+- [x] Settings (monthly budget + per-category budgets)
+- [x] Privacy & Security screen (trust wall explanation, delete-all-data modal)
+- [x] `MockAiService` / `AzureFoundryService` auto-switching
+- [x] Skeletons, empty states, error handling across all views
+
+### 🔜 Next Up
+- [ ] Fill in Azure Foundry credentials (`appsettings.json` placeholders)
+- [ ] Frontend deployment → GitHub Pages
+- [ ] Backend deployment → Azure App Service / Render
+- [ ] Move secrets to Azure Key Vault / App Service env vars
 
 ---
 
