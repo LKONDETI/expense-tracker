@@ -36,6 +36,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
         {
             e.HasKey(t => t.Id);
             e.Property(t => t.Amount).HasPrecision(10, 2);
+            e.Property(t => t.Balance).HasPrecision(12, 2);
             e.HasOne(t => t.User)
              .WithMany(u => u.Transactions)
              .HasForeignKey(t => t.UserId)
