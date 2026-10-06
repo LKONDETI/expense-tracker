@@ -48,6 +48,8 @@ public class MockAiService : IAiService
 
     private static readonly (string[] keywords, string category)[] CategoryRules =
     [
+        (["wise inc"], "Loan"),
+        (["health", "walgreens", "cvs"], "Health"),
         (["rent", "mortgage", "lease", "hoa", "property", "duke energy", "electric",
           "power", "utility", "water", "sewer", "pge ", "con edison", "xcel energy",
           "dominion", "georgia power", "fpl group", "entergy", "eversource"], "Housing"),

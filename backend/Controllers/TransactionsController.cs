@@ -34,7 +34,7 @@ public class TransactionsController(ITransactionService txnService) : Controller
     {
         var result = await txnService.CreateAsync(UserId, req);
         if (result is null)
-            return BadRequest(new { message = $"Invalid category '{req.Category}'. Must be one of the 8 fixed categories." });
+            return BadRequest(new { message = $"Invalid category '{req.Category}'. Must be one of the fixed categories." });
 
         return CreatedAtAction(nameof(GetAll), result);
     }

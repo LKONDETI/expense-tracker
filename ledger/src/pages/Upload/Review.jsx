@@ -5,7 +5,7 @@ import { api } from '../../utils/api'
 
 const CATEGORIES = [
   'Housing', 'Dining', 'Groceries', 'Transportation',
-  'Subscriptions', 'Shopping', 'Insurance', 'Other',
+  'Subscriptions', 'Shopping', 'Insurance', 'Health', 'Loan', 'Other',
 ]
 
 const fmt = (n) =>

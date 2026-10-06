@@ -12,7 +12,7 @@ const fmt = (n) =>
 
 const CATEGORIES = [
   'Housing', 'Dining', 'Groceries', 'Transportation',
-  'Subscriptions', 'Shopping', 'Insurance', 'Other',
+  'Subscriptions', 'Shopping', 'Insurance', 'Health', 'Loan', 'Other',
 ]
 
 // Parse a date string safely — avoids the UTC-midnight timezone shift bug.

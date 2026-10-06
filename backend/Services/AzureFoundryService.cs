@@ -25,7 +25,8 @@ public class AzureFoundryService(IConfiguration config, HttpClient http) : IAiSe
         - Use the ACTUAL DATE printed on the transaction line. Statements often span two calendar months
           (e.g. Aug 15 – Sep 14). Do NOT change dates to match the statement period — use the real date on each line.
         - If a year is missing from a date, infer it from surrounding context (statement header or adjacent dated rows).
-        - Categories (use exactly one): Housing, Dining, Groceries, Transportation, Subscriptions, Shopping, Insurance, Other.
+        - Categories (use exactly one): Housing, Dining, Groceries, Transportation, Subscriptions, Shopping, Insurance, Health, Loan, Other.
+        - Any merchant containing "Wise Inc" is Loan. Merchants containing "health", "Walgreens" or "CVS" are Health.
         - For known merchants provided, use the given category exactly. For unknowns, infer from context.
         """;
 

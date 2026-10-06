@@ -27,11 +27,13 @@ public static class TransactionCategory
     public const string Subscriptions  = "Subscriptions";
     public const string Shopping       = "Shopping";
     public const string Insurance      = "Insurance";
+    public const string Health         = "Health";
+    public const string Loan           = "Loan";
     public const string Other          = "Other";
 
     public static readonly string[] All =
     [
         Housing, Dining, Groceries, Transportation,
-        Subscriptions, Shopping, Insurance, Other
+        Subscriptions, Shopping, Insurance, Health, Loan, Other
     ];
 }

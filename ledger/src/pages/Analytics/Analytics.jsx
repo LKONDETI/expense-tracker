@@ -17,6 +17,8 @@ const CAT_COLORS = {
   Subscriptions:  '#8b5cf6',
   Shopping:       '#ec4899',
   Insurance:      '#14b8a6',
+  Health:         '#ef4444',
+  Loan:           '#a855f7',
   Other:          '#94a3b8',
 }
 
