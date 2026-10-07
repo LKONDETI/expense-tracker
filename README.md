@@ -16,7 +16,7 @@
 |---|---|
 | **Auth** | JWT register / login with BCrypt password hashing |
 | **PDF Upload** | Drag-and-drop upload → coordinate-based PDF text extraction → AI categorization; statement history panel & privacy trust wall |
-| **Statement Review** | User reviews and corrects categories before saving; merchant-category memory persists corrections for future uploads |
+| **Statement Review** | User reviews and corrects categories before saving; merchant-category memory persists corrections for future uploads. Categories include Subscriptions, Shopping, Insurance, **Health**, **Loan**, and Other, with auto-categorization rules |
 | **Transactions** | Data table with search, category filter, inline category editing, deletion, and running **Balance** column |
 | **Analytics** | Interactive **Recharts Bar Chart** (monthly income vs. outgo) & **Pie/Donut Chart** (category breakdown with month selector) |
 | **Subscriptions** | Auto-detected recurring payments across multiple billing cycles |
@@ -44,9 +44,9 @@
 ### Backend
 | Technology | Version | Purpose |
 |---|---|---|
-| .NET | 9 | Web API framework |
-| Entity Framework Core | 9 | ORM & database migrations |
-| Npgsql | 9 | PostgreSQL driver |
+| .NET | 10 | Web API framework |
+| Entity Framework Core | 10 | ORM & database migrations |
+| Npgsql | 10 | PostgreSQL driver |
 | PdfPig | latest | PDF bounding-box text extraction |
 | BCrypt.Net | latest | Password hashing |
 
@@ -71,7 +71,7 @@
                             │ REST / JSON (JWT Bearer)
                             ▼
 ┌─────────────────────────────────────────────────────────┐
-│              .NET 9 Web API (ASP.NET Core)               │
+│              .NET 10 Web API (ASP.NET Core)               │
 │                                                         │
 │  ┌─────────────┐  ┌──────────────┐  ┌───────────────┐   │
 │  │  Auth       │  │  Statements  │  │  Analytics    │   │
@@ -112,7 +112,7 @@
 
 ### Prerequisites
 
-- [.NET 9 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
+- [.NET 10 SDK](https://dotnet.microsoft.com/download/dotnet/10.0)
 - [Node.js 20+](https://nodejs.org/) and npm
 - A [Neon](https://neon.tech/) PostgreSQL project (free tier works)
 - _(Optional)_ Azure AI Foundry access with a Claude 3.5 Sonnet deployment
@@ -207,7 +207,7 @@ To enable real Claude 3.5 Sonnet AI responses, set these keys in `appsettings.De
 
 ```
 expense-tracker/
-├── backend/                  # .NET 9 Web API
+├── backend/                  # .NET 10 Web API
 │   ├── Controllers/          # Auth, Statements, Transactions, Analytics, Dashboard, Insights, Settings
 │   ├── DTOs/                 # Request & Response DTOs (TransactionDto, AnalyticsResponse, etc.)
 │   ├── Models/               # User, Statement, Transaction, MerchantCategoryMap, CategoryBudget
@@ -229,7 +229,7 @@ expense-tracker/
 ## Roadmap
 
 ### ✅ Done
-- [x] .NET 9 Web API with JWT authentication & BCrypt password hashing
+- [x] .NET 10 Web API with JWT authentication & BCrypt password hashing
 - [x] Neon Postgres + EF Core migrations (including running `Balance` column support)
 - [x] PDF statement parsing (coordinate-based Y-bucket row extractor) → AI categorization
 - [x] Statement upload review & history panel
