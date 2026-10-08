@@ -9,6 +9,7 @@ public interface ITransactionService
 {
     Task<List<TransactionDto>> GetAllAsync(Guid userId, string? category, string? search);
     Task<TransactionDto?> CreateAsync(Guid userId, CreateTransactionRequest req);
+    Task<TransactionDto?> UpdateAsync(Guid userId, Guid transactionId, UpdateTransactionRequest req);
     Task<bool> UpdateCategoryAsync(Guid userId, Guid transactionId, string category);
     Task<bool> DeleteAsync(Guid userId, Guid transactionId);
     Task<DashboardResponse> GetDashboardAsync(Guid userId);
@@ -38,19 +39,36 @@ public class TransactionService(AppDbContext db) : ITransactionService
 
     public async Task<TransactionDto?> CreateAsync(Guid userId, CreateTransactionRequest req)
     {
-        if (!TransactionCategory.All.Contains(req.Category))
+        if (!TransactionCategory.All.Contains(req.Category) || string.IsNullOrWhiteSpace(req.Description))
             return null;
 
         var txn = new Transaction
         {
             UserId      = userId,
             Date        = req.Date,
-            Description = req.Description,
+            Description = req.Description.Trim(),
             Amount      = req.Amount,
             Category    = req.Category,
         };
 
         db.Transactions.Add(txn);
+        await db.SaveChangesAsync();
+
+        return new TransactionDto(txn.Id, txn.Date, txn.Description, txn.Amount, txn.Category, txn.Balance);
+    }
+
+    public async Task<TransactionDto?> UpdateAsync(Guid userId, Guid transactionId, UpdateTransactionRequest req)
+    {
+        var txn = await db.Transactions
+            .FirstOrDefaultAsync(t => t.Id == transactionId && t.UserId == userId);
+
+        if (txn is null) return null;
+
+        txn.Date        = req.Date;
+        txn.Description = req.Description.Trim();
+        txn.Amount      = req.Amount;
+        txn.Category    = req.Category;
+
         await db.SaveChangesAsync();
 
         return new TransactionDto(txn.Id, txn.Date, txn.Description, txn.Amount, txn.Category, txn.Balance);

@@ -1,6 +1,6 @@
 import { useState, useEffect, useCallback } from 'react'
 import { useNavigate, Link } from 'react-router-dom'
-import { Search, Pencil, Trash2, Loader2, UploadCloud, Check, X } from 'lucide-react'
+import { Search, Pencil, Trash2, Loader2, UploadCloud, Check, X, Plus } from 'lucide-react'
 import { api } from '../../utils/api'
 
 const CATEGORIES = [
@@ -67,9 +67,59 @@ export default function Transactions() {
   }, [activeCategory]) // eslint-disable-line
 
   // ── Inline category edit ────────────────────────────────────
-  const startEdit = (txn) => {
-    setEditingId(txn.id)
-    setEditCategory(txn.category)
+  // ── Add / edit modal ────────────────────────────────────────
+  const [form, setForm]             = useState(null)  // null = closed
+  const [formSaving, setFormSaving] = useState(false)
+  const [formError, setFormError]   = useState('')
+
+  const today = () => {
+    const d = new Date()
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+  }
+
+  const openAdd = () => {
+    setFormError('')
+    setForm({ id: null, date: today(), description: '', type: 'expense', amount: '', category: 'Other' })
+  }
+
+  const openEdit = (txn) => {
+    setFormError('')
+    setForm({
+      id: txn.id,
+      date: String(txn.date).slice(0, 10),
+      description: txn.description,
+      type: txn.amount < 0 ? 'expense' : 'income',
+      amount: String(Math.abs(txn.amount)),
+      category: txn.category,
+    })
+  }
+
+  const closeForm = () => setForm(null)
+
+  const submitForm = async (e) => {
+    e.preventDefault()
+    const value = Math.abs(parseFloat(form.amount))
+    if (!value) { setFormError('Enter an amount greater than 0.'); return }
+
+    const payload = {
+      date: form.date,
+      description: form.description.trim(),
+      amount: form.type === 'expense' ? -value : value,
+      category: form.category,
+    }
+
+    setFormSaving(true)
+    setFormError('')
+    try {
+      if (form.id) await api.put(`/api/transactions/${form.id}`, payload)
+      else         await api.post('/api/transactions', payload)
+      closeForm()
+      fetchTransactions()
+    } catch (err) {
+      setFormError(err.message || 'Failed to save transaction.')
+    } finally {
+      setFormSaving(false)
+    }
   }
 
   const cancelEdit = () => {
@@ -126,6 +176,9 @@ export default function Transactions() {
             aria-label="Search transactions"
           />
         </div>
+        <button className="btn-primary" onClick={openAdd}>
+          <Plus size={14} /> Add transaction
+        </button>
       </div>
 
       {/* Category chips */}
@@ -231,7 +284,7 @@ export default function Transactions() {
                         <td>
                           <div style={{ display: 'flex', gap: 4, justifyContent: 'flex-end' }}>
                             {!isEditing && (
-                              <button className="icon-btn-muted" onClick={() => startEdit(txn)} aria-label="Edit category">
+                              <button className="icon-btn-muted" onClick={() => openEdit(txn)} aria-label="Edit transaction">
                                 <Pencil size={13} />
                               </button>
                             )}
@@ -256,6 +309,69 @@ export default function Transactions() {
               {transactions.length} transaction{transactions.length !== 1 ? 's' : ''}
             </p>
           )}
+        </div>
+      )}
+
+      {/* Add / edit modal */}
+      {form && (
+        <div
+          role="dialog"
+          aria-modal="true"
+          aria-label={form.id ? 'Edit transaction' : 'Add transaction'}
+          onClick={(e) => { if (e.target === e.currentTarget && !formSaving) closeForm() }}
+          style={{
+            position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.4)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000,
+          }}
+        >
+          <form
+            onSubmit={submitForm}
+            style={{
+              background: 'var(--color-surface, #fff)', borderRadius: 12, padding: 24,
+              width: 380, maxWidth: '90vw', display: 'flex', flexDirection: 'column', gap: 12,
+            }}
+          >
+            <h3 style={{ margin: 0 }}>{form.id ? 'Edit transaction' : 'Add transaction'}</h3>
+
+            <label>Date
+              <input type="date" required className="search-input" style={{ width: '100%' }}
+                value={form.date} onChange={(e) => setForm({ ...form, date: e.target.value })} />
+            </label>
+            <label>Description
+              <input type="text" required maxLength={200} className="search-input" style={{ width: '100%' }}
+                value={form.description} onChange={(e) => setForm({ ...form, description: e.target.value })} />
+            </label>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <label style={{ flex: 1 }}>Type
+                <select className="category-select-inline" style={{ width: '100%' }}
+                  value={form.type} onChange={(e) => setForm({ ...form, type: e.target.value })}>
+                  <option value="expense">Expense</option>
+                  <option value="income">Income</option>
+                </select>
+              </label>
+              <label style={{ flex: 1 }}>Amount
+                <input type="number" required min="0.01" step="0.01" className="search-input" style={{ width: '100%' }}
+                  value={form.amount} onChange={(e) => setForm({ ...form, amount: e.target.value })} />
+              </label>
+            </div>
+            <label>Category
+              <select className="category-select-inline" style={{ width: '100%' }}
+                value={form.category} onChange={(e) => setForm({ ...form, category: e.target.value })}>
+                {CATEGORIES.filter((c) => c !== 'All').map((c) => (
+                  <option key={c} value={c}>{c}</option>
+                ))}
+              </select>
+            </label>
+
+            {formError && <div className="upload-error-banner">{formError}</div>}
+
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button type="button" className="btn-secondary" onClick={closeForm} disabled={formSaving}>Cancel</button>
+              <button type="submit" className="btn-primary" disabled={formSaving}>
+                {formSaving ? <Loader2 size={14} className="upload-spinner" /> : 'Save'}
+              </button>
+            </div>
+          </form>
         </div>
       )}
     </div>

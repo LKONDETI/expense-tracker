@@ -106,10 +106,38 @@ public class StatementService(AppDbContext db, IAiService ai) : IStatementServic
             statement.DateRangeStart = parsed.Min(t => t.Date);
             statement.DateRangeEnd   = parsed.Max(t => t.Date);
             await db.SaveChangesAsync();
+
+            // 6. Flag rows that already exist for this user. Each existing row can
+            //    "absorb" only one parsed row, so two identical purchases on the same
+            //    day in a new file are not both flagged against a single saved one.
+            var start = statement.DateRangeStart!.Value;
+            var end   = statement.DateRangeEnd!.Value;
+            var existing = await db.Transactions
+                .Where(t => t.UserId == userId && t.Date >= start && t.Date <= end)
+                .Select(t => new { t.Date, t.Amount, t.Description })
+                .ToListAsync();
+
+            var remaining = existing
+                .GroupBy(t => DuplicateKey(t.Date, t.Amount, t.Description))
+                .ToDictionary(g => g.Key, g => g.Count());
+
+            parsed = parsed.Select(t =>
+            {
+                var key = DuplicateKey(t.Date, t.Amount, t.Description);
+                if (remaining.TryGetValue(key, out var n) && n > 0)
+                {
+                    remaining[key] = n - 1;
+                    return t with { IsDuplicate = true };
+                }
+                return t;
+            }).ToList();
         }
 
         return new UploadResponse(statement.Id, statement.FileName, parsed);
     }
+
+    private static string DuplicateKey(DateOnly date, decimal amount, string description) =>
+        $"{date:yyyy-MM-dd}|{amount:F2}|{string.Join(' ', description.ToLowerInvariant().Split((char[]?)null, StringSplitOptions.RemoveEmptyEntries))}";
 
     public async Task<int> ConfirmAndSaveAsync(Guid userId, ConfirmStatementRequest req)
     {

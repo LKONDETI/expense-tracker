@@ -40,6 +40,13 @@ public record CreateTransactionRequest(
 
 public record UpdateCategoryRequest(string Category);
 
+public record UpdateTransactionRequest(
+    DateOnly Date,
+    string Description,
+    decimal Amount,
+    string Category
+);
+
 // ── Statement Upload ──────────────────────────────────────────
 public record UploadResponse(
     Guid StatementId,
@@ -52,7 +59,8 @@ public record ParsedTransactionDto(
     string Description,
     decimal Amount,
     string Category,  // AI-suggested, user can correct before saving
-    decimal? Balance = null
+    decimal? Balance = null,
+    bool IsDuplicate = false  // true when an identical transaction is already saved
 );
 
 public record ConfirmStatementRequest(

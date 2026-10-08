@@ -1,5 +1,6 @@
 using System.Security.Claims;
 using Ledger.API.DTOs;
+using Ledger.API.Models;
 using Ledger.API.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
@@ -37,6 +38,20 @@ public class TransactionsController(ITransactionService txnService) : Controller
             return BadRequest(new { message = $"Invalid category '{req.Category}'. Must be one of the fixed categories." });
 
         return CreatedAtAction(nameof(GetAll), result);
+    }
+
+    /// <summary>Edit a transaction's date, description, amount and category.</summary>
+    [HttpPut("{id:guid}")]
+    [ProducesResponseType(typeof(TransactionDto), 200)]
+    [ProducesResponseType(400)]
+    [ProducesResponseType(404)]
+    public async Task<IActionResult> Update(Guid id, [FromBody] UpdateTransactionRequest req)
+    {
+        if (!TransactionCategory.All.Contains(req.Category) || string.IsNullOrWhiteSpace(req.Description))
+            return BadRequest(new { message = "A description and a valid category are required." });
+
+        var result = await txnService.UpdateAsync(UserId, id, req);
+        return result is null ? NotFound(new { message = "Transaction not found." }) : Ok(result);
     }
 
     /// <summary>Correct the category for a transaction (also updates merchant memory).</summary>
